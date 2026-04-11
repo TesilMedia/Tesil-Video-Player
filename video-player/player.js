@@ -496,8 +496,8 @@
     player.dataset.state = playing ? "playing" : "paused";
     playPause.setAttribute("aria-label", playing ? "Pause" : "Play");
     playPause.dataset.tooltip = playing
-      ? "Pause (Space, K)"
-      : "Play (Space, K)";
+      ? "Pause (Space)"
+      : "Play (Space)";
   }
 
   function setMutedUI() {
@@ -866,7 +866,6 @@
     const step = 5;
     switch (e.key) {
       case " ":
-      case "k":
         e.preventDefault();
         togglePlay();
         break;
