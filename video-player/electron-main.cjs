@@ -1,6 +1,8 @@
 "use strict";
 
 const { app, BrowserWindow, ipcMain } = require("electron");
+
+app.setName("Tesil Media Player");
 const path = require("path");
 const fs = require("fs");
 const { pathToFileURL } = require("url");

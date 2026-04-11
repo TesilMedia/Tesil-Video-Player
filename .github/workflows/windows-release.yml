@@ -61,6 +61,18 @@ jobs:
             throw "No win-unpacked output under dist/"
           }
 
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $appFolder = $pkg.build.productName
+          $exeLeaf = "$appFolder.exe"
+          $runRel = "$appFolder\$exeLeaf"
+
+          $wrapRoot = Join-Path $env:RUNNER_TEMP "sfxpackroot"
+          if (Test-Path $wrapRoot) { Remove-Item $wrapRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $wrapRoot | Out-Null
+          $appDir = Join-Path $wrapRoot $appFolder
+          New-Item -ItemType Directory -Force -Path $appDir | Out-Null
+          Get-ChildItem -LiteralPath $unpacked | Copy-Item -Destination $appDir -Recurse -Force
+
           $7z = "C:\Program Files\7-Zip\7z.exe"
           if (-not (Test-Path $7z)) { $7z = "C:\Program Files (x86)\7-Zip\7z.exe" }
           if (-not (Test-Path $7z)) { throw "7-Zip not found on runner" }
@@ -75,24 +87,24 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stg | Out-Null
           $pack7z = Join-Path $stg "app.7z"
 
-          Push-Location $unpacked
-          & $7z a -t7z -mx5 -r $pack7z *
+          $toPack = Join-Path $wrapRoot $appFolder
+          Push-Location $wrapRoot
+          & $7z a -t7z -mx5 -r $pack7z ("{0}\*" -f $toPack)
           $z7 = $LASTEXITCODE
           Pop-Location
           if ($z7 -ne 0) { throw "7z archive failed: exit code $z7" }
 
-          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
-          $outName = "$($pkg.build.productName)-$($pkg.version)-Windows.exe"
+          $outName = "$appFolder-$($pkg.version)-Windows.exe"
           $outExe = Join-Path $distRoot $outName
           if (Test-Path $outExe) { Remove-Item $outExe -Force }
 
           $cfg = Join-Path $stg "sfx-config.txt"
           $cfgLines = @(
             ';!@Install@!UTF-8!'
-            'Title="CustomVideoPlayer"'
-            'BeginPrompt="This will extract CustomVideoPlayer and start it."'
+            'Title="Tesil Media Player"'
+            'BeginPrompt="This will extract Tesil Media Player into a subfolder and start it."'
             'GUIMode="2"'
-            'RunProgram="CustomVideoPlayer.exe"'
+            "RunProgram=`"$runRel`""
           )
           [IO.File]::WriteAllLines($cfg, $cfgLines, [Text.UTF8Encoding]::new($false))
 
@@ -119,7 +131,7 @@ jobs:
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: CustomVideoPlayer-Windows
+          name: Tesil-Media-Player-Windows
           path: video-player/dist/*.exe
 
       - name: Logs on failure
