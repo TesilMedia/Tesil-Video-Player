@@ -1,6 +1,6 @@
 {
   "name": "custom-video-player",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Custom video player for Windows (desktop)",
   "main": "electron-main.cjs",
@@ -45,14 +45,6 @@
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
       "createDesktopShortcut": true
-    },
-    "fileAssociations": [
-      {
-        "ext": ["mp4", "m4v", "webm", "mkv", "mov", "ogv", "ogg", "avi", "3gp", "3g2", "wmv"],
-        "name": "Video file",
-        "description": "Open with Custom Video Player",
-        "role": "Viewer"
-      }
-    ]
+    }
   }
 }
