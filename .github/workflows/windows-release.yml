@@ -46,7 +46,8 @@ jobs:
           try {
             npm install
             npm ls --depth=0
-            npm run dist *> build.log
+            # Use cmd so exit codes are reliable when output is redirected (PowerShell `*>` can mask npm failures).
+            cmd /c "npm run dist > build.log 2>&1"
             if ($LASTEXITCODE -ne 0) {
               Get-Content build.log -ErrorAction SilentlyContinue
               throw "npm run dist failed: exit code $LASTEXITCODE"
@@ -59,15 +60,21 @@ jobs:
           New-Item -ItemType Directory -Force -Path $outDist | Out-Null
 
           $distDir = Join-Path $vp "dist"
-          $exes = Get-ChildItem -Path $distDir -Filter *.exe -ErrorAction SilentlyContinue
-          if (-not $exes) {
+          $exes = @()
+          if (Test-Path $distDir) {
+            $exes = Get-ChildItem -Path $distDir -Recurse -Filter *.exe -ErrorAction SilentlyContinue
+          }
+          if (-not $exes -or $exes.Count -eq 0) {
             Write-Host "No *.exe under $distDir; contents:"
             if (Test-Path $distDir) { Get-ChildItem -Recurse $distDir }
-            throw "electron-builder did not produce dist/*.exe"
+            throw "electron-builder did not produce any dist/**/*.exe"
           }
           Copy-Item -Force $exes.FullName $outDist
 
-          Copy-Item -Force (Join-Path $vp "build.log") (Join-Path $env:GITHUB_WORKSPACE "video-player/build.log")
+          $bl = Join-Path $vp "build.log"
+          if (Test-Path $bl) {
+            Copy-Item -Force $bl (Join-Path $env:GITHUB_WORKSPACE "video-player/build.log")
+          }
 
       - name: Show build output on failure
         if: failure()
@@ -89,6 +96,7 @@ jobs:
         with:
           name: ci-failure-logs
           path: |
+            ${{ runner.temp }}/vpbuild/build.log
             video-player/build.log
             video-player/npm-debug.log
 
@@ -97,6 +105,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: video-player/dist/*.exe
+          fail_on_unmatched_files: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

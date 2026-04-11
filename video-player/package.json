@@ -1,6 +1,6 @@
 {
   "name": "custom-video-player",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": true,
   "description": "Custom video player for Windows (desktop)",
   "author": "becknerd",
@@ -40,7 +40,8 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "allowElevation": true
+      "allowElevation": true,
+      "publisherName": "becknerd"
     }
   }
 }
