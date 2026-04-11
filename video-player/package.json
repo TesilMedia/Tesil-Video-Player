@@ -1,13 +1,19 @@
 {
   "name": "custom-video-player",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Custom video player for Windows (desktop)",
+  "author": "becknerd",
+  "homepage": "https://github.com/becknerd/Tesil-Player",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/becknerd/Tesil-Player.git"
+  },
   "main": "electron-main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable --x64",
-    "dist:installer": "electron-builder --win nsis --x64"
+    "dist": "electron-builder --win portable",
+    "dist:installer": "electron-builder --win nsis"
   },
   "devDependencies": {
     "electron": "^33.4.0",
@@ -15,7 +21,7 @@
   },
   "build": {
     "appId": "com.custom.videoplayer",
-    "productName": "Custom Video Player",
+    "productName": "CustomVideoPlayer",
     "copyright": "Copyright © 2026",
     "directories": {
       "output": "dist"
@@ -42,9 +48,7 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "allowElevation": true,
-      "createDesktopShortcut": true
+      "allowToChangeInstallationDirectory": true
     }
   }
 }
