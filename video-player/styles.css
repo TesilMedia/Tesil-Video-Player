@@ -17,6 +17,7 @@
   --chrome-control-bg-hover: #383d47;
   --chrome-control-border: rgba(255, 255, 255, 0.14);
   --chrome-track: #454a56;
+  /* Default chrome sizing; `.player` overrides with container-relative values */
   --chrome-control-height: 2.5rem;
   /* Match progress-to-bar spacing with `.player__bar` inter-control gap */
   --chrome-gap: 0.45rem;
@@ -117,6 +118,15 @@ body {
   border-radius: var(--radius);
   overflow: hidden;
   aspect-ratio: 16 / 9;
+  /* Scale controls with the player width (avoids clipping under overflow:hidden) */
+  container-type: inline-size;
+  container-name: player;
+  /* All chrome scales with player width (cqw); one row, no breakpoint wrap */
+  --chrome-control-height: clamp(0.98rem, 0.06rem + 8.8cqw, 2.5rem);
+  --chrome-font-size: clamp(0.4rem, 0.05rem + 3.35cqw, 0.875rem);
+  --chrome-gap: clamp(0.04rem, 0.006rem + 1.55cqw, 0.45rem);
+  /* Volume rail width (scales with player width via cqw) */
+  --vol-rail-expanded: min(14rem, max(3.5rem, 34cqw));
 }
 
 /* Root is focusable (tabIndex); kill UA / :focus-visible rings on the shell */
@@ -193,25 +203,55 @@ body {
   z-index: 1;
 }
 
+.player__hud {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.player:hover .player__hud,
+.player[data-scrubbing="true"] .player__hud,
+.player .player__hud:focus-within,
+.player:not(.player--idle):focus-within .player__hud {
+  opacity: 1;
+}
+
+.player__corner-tools {
+  position: absolute;
+  top: clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem);
+  right: clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem);
+  z-index: 2;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--chrome-gap);
+  max-width: calc(100% - 1.5rem);
+}
+
+.player__corner-volume {
+  position: absolute;
+  top: clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem);
+  left: clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem);
+  z-index: 2;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  max-width: calc(100% - 1.5rem);
+  min-width: 0;
+}
+
 .player__chrome {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 2;
-  padding: 0.95rem 0.75rem 0.6rem;
+  /* Shared with `.player__bar-tools` so the PiP/fullscreen cluster lines up with other chrome pills. */
+  --chrome-pad-x: clamp(0.22rem, 0.03rem + 1.8cqw, 0.75rem);
+  --chrome-pad-b: clamp(0.32rem, 0.1rem + 1.35cqw, 0.6rem);
+  padding: clamp(0.42rem, 0.18rem + 2.4cqw, 0.95rem) var(--chrome-pad-x) var(--chrome-pad-b);
   background: transparent;
-  opacity: 0;
-  transition: opacity 0.2s ease;
   /* Do not set overflow-x on this ancestor: it clips the scrub preview (above the seek bar). */
   overflow: visible;
-}
-
-.player:hover .player__chrome,
-.player[data-scrubbing="true"] .player__chrome,
-.player .player__chrome:focus-within,
-.player:not(.player--idle):focus-within .player__chrome {
-  opacity: 1;
 }
 
 /*
@@ -219,13 +259,13 @@ body {
  * promote :focus-visible in Chromium; outline + box-shadow must both be cleared.
  * Universal descendant covers any future control types.
  */
-.player__chrome *:focus,
-.player__chrome *:focus-visible {
+.player__hud *:focus,
+.player__hud *:focus-visible {
   outline: none !important;
   box-shadow: none !important;
 }
 
-.player__chrome button::-moz-focus-inner {
+.player__hud button::-moz-focus-inner {
   border: 0;
 }
 
@@ -253,28 +293,25 @@ body {
 
 /*
  * Idle hides chrome even while :hover on the frame (Netflix-style). Does not apply when a
- * control inside .player__chrome still has focus — JS blurs those on idle; :has() is a fallback.
+ * control inside a HUD surface still has focus — JS blurs those on idle; :has() is a fallback.
  */
-.player.player--idle:not(:has(.player__chrome:focus-within)):not([data-scrubbing="true"])
-  .player__chrome {
+.player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"]) .player__hud {
   opacity: 0 !important;
   pointer-events: none;
 }
 
-.player.player--idle:not(:has(.player__chrome:focus-within)):not([data-scrubbing="true"]) {
+.player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"]) {
   cursor: none;
 }
 
-.player.player--idle:not(:has(.player__chrome:focus-within)):not([data-scrubbing="true"])
+.player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
   .player__viewport {
   cursor: none !important;
 }
 
-/* Hide chrome immediately when the pointer leaves the player (e.g. after click-to-focus). */
-.player.player--pointer-outside:not(:has(.player__chrome:focus-within)):not(
-    [data-scrubbing="true"]
-  )
-  .player__chrome {
+/* Hide HUD immediately when the pointer leaves the player (e.g. after click-to-focus). */
+.player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+  .player__hud {
   opacity: 0 !important;
   pointer-events: none;
 }
@@ -308,8 +345,8 @@ body {
 
 .player__scrub-preview-canvas {
   display: block;
-  width: 160px;
-  height: 90px;
+  width: var(--scrub-preview-w, 160px);
+  height: var(--scrub-preview-h, 90px);
   border-radius: 6px;
   background: #111;
 }
@@ -322,8 +359,8 @@ body {
 }
 
 .player__progress {
-  --range-thumb: 14px;
-  --range-track-h: 10px;
+  --range-thumb: clamp(11px, 0.35rem + 1.8cqw, 14px);
+  --range-track-h: clamp(7px, 0.25rem + 1.2cqw, 10px);
   flex: 1;
   width: 100%;
   min-width: 0;
@@ -372,14 +409,34 @@ body {
   gap: var(--chrome-gap);
   flex-wrap: nowrap;
   min-height: var(--chrome-control-height);
-  min-width: min-content;
+  min-width: 0;
+  width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: visible;
-  scrollbar-width: thin;
+  /* Reserve space for PiP + fullscreen (absolutely positioned). */
+  padding-right: calc(2 * var(--chrome-control-height) + var(--chrome-gap));
+  overflow: visible;
 }
 
-.player__zoom-group {
+/* Bottom-right cluster: same anchoring idea as `.player__corner-tools` (fixed to frame, not bar flex). */
+.player__bar-tools {
+  position: absolute;
+  right: var(--chrome-pad-x);
+  bottom: var(--chrome-pad-b);
+  z-index: 9;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--chrome-gap);
+  max-width: calc(100% - 1.5rem);
+  pointer-events: none;
+}
+
+.player__bar-tools > * {
+  pointer-events: auto;
+}
+
+.player__zoom-group,
+.player__windows-group {
   display: inline-flex;
   align-items: stretch;
   justify-content: center;
@@ -387,6 +444,7 @@ body {
   box-sizing: border-box;
   width: max-content;
   flex-shrink: 0;
+  min-width: max-content;
   height: var(--chrome-control-height);
   padding: 0;
   background: var(--chrome-control-bg);
@@ -395,25 +453,35 @@ body {
   overflow: hidden;
 }
 
-.player__zoom-group .player__btn {
+.player__zoom-group .player__btn,
+.player__windows-group .player__btn {
   align-self: stretch;
   height: auto;
   min-height: 0;
-  padding: 0 0.28rem;
+  padding: 0 clamp(0.08rem, 0.02rem + 0.7cqw, 0.28rem);
   background: transparent;
   border: none;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.95);
 }
 
-.player__zoom-group .player__btn:hover {
+.player__windows-group .player__btn.player__btn--square {
+  flex: 0 0 var(--chrome-control-height);
+  width: var(--chrome-control-height);
+  min-width: var(--chrome-control-height);
+  padding: 0;
+  aspect-ratio: 1;
+}
+
+.player__zoom-group .player__btn:hover,
+.player__windows-group .player__btn:hover {
   background: var(--chrome-control-bg-hover);
 }
 
 .player__btn--zoom-reset {
   min-width: 0;
   max-width: 100%;
-  padding: 0 0.45rem;
+  padding: 0 clamp(0.12rem, 0.04rem + 0.9cqw, 0.45rem);
   font-size: var(--chrome-font-size);
   font-variant-numeric: tabular-nums;
 }
@@ -435,7 +503,7 @@ body {
   border: 1px solid var(--chrome-control-border);
   background: var(--chrome-control-bg);
   color: #fff;
-  padding: 0 0.7rem;
+  padding: 0 clamp(0.18rem, 0.06rem + 1.1cqw, 0.7rem);
   border-radius: 6px;
   cursor: pointer;
   font-size: var(--chrome-font-size);
@@ -460,13 +528,14 @@ body {
   width: 0;
   height: 0;
   border-style: solid;
-  border-width: 8px 0 8px 12px;
+  border-width: 0.5em 0 0.5em 0.75em;
   border-color: transparent transparent transparent #fff;
+  font-size: clamp(9px, 0.22rem + 2.5cqw, 16px);
 }
 
 .player[data-state="playing"] .icon-play {
-  width: 10px;
-  height: 14px;
+  width: 0.625em;
+  height: 0.875em;
   border: none;
   background: linear-gradient(
     90deg,
@@ -484,12 +553,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: clamp(12px, 0.35rem + 2.4cqw, 18px);
+  height: clamp(12px, 0.35rem + 2.4cqw, 18px);
 }
 
 .icon-volume__svg {
   display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .icon-volume__svg--off {
@@ -512,6 +583,7 @@ body {
   gap: 0;
   width: max-content;
   flex-shrink: 0;
+  min-width: max-content;
   height: var(--chrome-control-height);
   padding: 0;
   background: var(--chrome-control-bg);
@@ -521,11 +593,12 @@ body {
 }
 
 .player__time-group .player__time {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 0.5rem;
+  padding: 0 clamp(0.12rem, 0.12cqw + 0.12rem, 0.5rem);
   text-align: center;
   font-size: var(--chrome-font-size);
   font-variant-numeric: tabular-nums;
@@ -535,8 +608,8 @@ body {
 
 .player__btn--frame {
   flex-shrink: 0;
-  width: 1.55rem;
-  min-width: 1.55rem;
+  width: clamp(1rem, 0.55rem + 2.4cqw, 1.55rem);
+  min-width: clamp(1rem, 0.55rem + 2.4cqw, 1.55rem);
   align-self: stretch;
   height: auto;
   min-height: 0;
@@ -557,16 +630,19 @@ body {
 
 .icon-frame-arrow {
   display: block;
+  width: clamp(8px, 0.18rem + 1.8cqw, 11px);
+  height: clamp(8px, 0.18rem + 1.8cqw, 11px);
 }
 
+/* Width set in player.js to match #zoomGroup (intrinsic max-content width). */
 .player__rate {
   box-sizing: border-box;
   display: inline-flex;
   align-items: stretch;
   justify-content: center;
   gap: 0.125rem;
-  width: max-content;
   flex-shrink: 0;
+  min-width: 0;
   height: var(--chrome-control-height);
   padding: 0;
   background: var(--chrome-control-bg);
@@ -576,10 +652,11 @@ body {
 }
 
 .player__rate .player__btn {
+  flex: 0 0 auto;
   align-self: stretch;
   height: auto;
   min-height: 0;
-  padding: 0 0.28rem;
+  padding: 0 clamp(0.08rem, 0.02rem + 0.7cqw, 0.28rem);
   background: transparent;
   border: none;
   font-weight: 400;
@@ -592,11 +669,12 @@ body {
 
 .player__rate-select-wrap {
   position: relative;
-  flex: 0 1 auto;
+  flex: 1 1 0;
   display: flex;
   align-items: stretch;
   align-self: stretch;
-  min-width: 3.5rem;
+  min-width: 0;
+  justify-content: center;
 }
 
 .player__rate-select {
@@ -610,12 +688,12 @@ body {
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, 0.95);
-  background: transparent;
+  background-color: var(--chrome-control-bg);
   background-image: none;
   border: none;
   box-shadow: none;
   border-radius: 6px;
-  padding: 0 0.45rem;
+  padding: 0 clamp(0.12rem, 0.04rem + 0.85cqw, 0.45rem);
   cursor: pointer;
   text-align: center;
   text-align-last: center;
@@ -633,48 +711,62 @@ body {
   color: #fff;
 }
 
+/* One pill: mute + horizontal rail (always visible; rail width scales with `--vol-rail-expanded`). */
 .player__volume {
   box-sizing: border-box;
   display: inline-flex;
   align-items: stretch;
-  justify-content: center;
-  gap: 0.22rem;
-  width: max-content;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
   height: var(--chrome-control-height);
-  padding: 0;
   background: var(--chrome-control-bg);
   border: 1px solid var(--chrome-control-border);
   border-radius: 8px;
   overflow: hidden;
 }
 
-.player__volume .player__btn {
-  align-self: stretch;
-  height: auto;
-  min-height: 0;
-  padding: 0 0.22rem;
-  background: transparent;
+.player__volume > .player__volume-mute {
+  flex: 0 0 var(--chrome-control-height);
+  width: var(--chrome-control-height);
+  min-width: var(--chrome-control-height);
+  height: var(--chrome-control-height);
+  align-self: center;
+  margin: 0;
+  padding: 0;
   border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--chrome-font-size);
 }
 
-.player__volume .player__btn:hover {
+.player__volume > .player__volume-mute:hover {
   background: var(--chrome-control-bg-hover);
 }
 
-.player__volume-slider {
-  --vol-thumb: 12px;
-  --vol-track-h: 4px;
-  align-self: center;
+.player__volume-slider-rail {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
   flex: 1 1 auto;
-  min-width: 88px;
-  width: 0;
-  max-width: 18rem;
+  min-width: 0;
+  max-width: var(--vol-rail-expanded);
+  padding: 0 clamp(0.22rem, 0.06rem + 1cqw, 0.5rem);
+  overflow: visible;
+}
+
+.player__volume-slider {
+  --vol-thumb: clamp(11px, 0.35rem + 1.8cqw, 14px);
+  --vol-track-h: clamp(7px, 0.25rem + 1.2cqw, 10px);
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: clamp(1.5rem, 0.75rem + 9cqw, 5rem);
   height: var(--vol-thumb);
+  margin: 0;
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
-  border-radius: 2px;
   cursor: pointer;
 }
 
@@ -689,8 +781,9 @@ body {
   width: var(--vol-thumb);
   height: var(--vol-thumb);
   border-radius: 50%;
-  background: #fff;
+  background: var(--accent);
   margin-top: calc((var(--vol-track-h) - var(--vol-thumb)) / 2);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
 }
 
 .player__volume-slider::-moz-range-thumb {
@@ -698,7 +791,8 @@ body {
   height: var(--vol-thumb);
   border: none;
   border-radius: 50%;
-  background: #fff;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
 }
 
 .player__volume-slider::-moz-range-track {
@@ -720,6 +814,8 @@ body {
 
 .icon-fs__svg {
   display: block;
+  width: clamp(10px, 0.22rem + 2cqw, 14px);
+  height: clamp(10px, 0.22rem + 2cqw, 14px);
 }
 
 .tooltip-layer {
@@ -728,16 +824,17 @@ body {
   left: 0;
   top: 0;
   margin: 0;
-  max-width: min(18rem, calc(100vw - 16px));
-  padding: 0.35rem 0.5rem;
-  font-size: var(--chrome-font-size);
+  /* `em` sizes track `font-size` (set in CSS for page chrome; JS syncs from the player when over it). */
+  max-width: min(20em, calc(100vw - 16px));
+  padding: 0.4em 0.57em;
+  font-size: clamp(0.65rem, 0.2rem + 1.1vw, 0.875rem);
   font-weight: 500;
   line-height: 1.35;
   color: #fff;
   background: rgba(26, 29, 35, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  border-radius: 0.43em;
+  box-shadow: 0 0.29em 1.14em rgba(0, 0, 0, 0.45);
   pointer-events: none;
   white-space: normal;
 }

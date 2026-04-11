@@ -20,6 +20,7 @@
   const zoomInBtn = document.getElementById("zoomIn");
   const zoomOutBtn = document.getElementById("zoomOut");
   const zoomResetBtn = document.getElementById("zoomReset");
+  const zoomGroup = document.getElementById("zoomGroup");
   const zoomLabel = document.getElementById("zoomLabel");
   const playbackRateSelect = document.getElementById("playbackRate");
   const rateDownBtn = document.getElementById("rateDown");
@@ -27,12 +28,18 @@
   const tooltipLayer = document.getElementById("tooltipLayer");
   const frameBackBtn = document.getElementById("frameBack");
   const frameForwardBtn = document.getElementById("frameForward");
+  const ratePill = player.querySelector(".player__rate");
+  const chromeEl = player.querySelector(".player__chrome");
+  const cornerTools = player.querySelector(".player__corner-tools");
+  const cornerVolume = player.querySelector(".player__corner-volume");
 
   const PREVIEW_W = 160;
   const PREVIEW_H = 90;
 
   let blobUrl = null;
   let scrubPreviewActive = false;
+  /** Last pointer X while preview is shown; used to reflow size on resize. */
+  let lastPreviewClientX = null;
   let previewSeekRaf = null;
   /** Latest scrub time while preview is active; not cleared until seek pipeline catches up or hide. */
   let previewDesiredTime = null;
@@ -62,10 +69,17 @@
     panY = Math.max(-maxY, Math.min(maxY, panY));
   }
 
+  function syncRatePillWidthToZoom() {
+    if (!(zoomGroup instanceof HTMLElement) || !(ratePill instanceof HTMLElement)) return;
+    const w = zoomGroup.offsetWidth;
+    if (w > 0) ratePill.style.width = `${w}px`;
+  }
+
   function applyZoomTransform() {
     zoomLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
     videoViewport.dataset.canPan = zoomLevel > 1.001 ? "true" : "false";
     zoomLabel.textContent = `${Math.round(zoomLevel * 100)}%`;
+    syncRatePillWidthToZoom();
   }
 
   /**
@@ -257,6 +271,9 @@
   function hideScrubPreview() {
     setScrubPreviewVisible(false);
     clearPreviewCanvas();
+    lastPreviewClientX = null;
+    scrubPreview.style.removeProperty("--scrub-preview-w");
+    scrubPreview.style.removeProperty("--scrub-preview-h");
   }
 
   /** Progress track plus a few pixels so preview still shows when hovering slightly off the bar. */
@@ -307,11 +324,62 @@
     return ratio * dur;
   }
 
+  /**
+   * Size and place the scrub preview inside the player. Width uses the same cap as mid-track
+   * (vertical space, track width, player width) — it does not shrink when the pointer is near the
+   * ends; only horizontal position shifts until the pointer moves inward.
+   */
+  function layoutScrubPreviewAtRatio(ratio) {
+    const wrap = progressWrap.getBoundingClientRect();
+    const pr = player.getBoundingClientRect();
+    if (wrap.width <= 0) return;
+
+    const pw = wrap.width;
+    const r = Math.min(1, Math.max(0, ratio));
+    const playerPad = 4;
+
+    const spaceAbove = wrap.top - pr.top - 8;
+    let timeBlock = 22;
+    if (previewTimeEl instanceof HTMLElement && scrubPreviewActive) {
+      const th = Math.ceil(previewTimeEl.getBoundingClientRect().height);
+      if (th > 0) timeBlock = th;
+    }
+    const gap = 4;
+    const maxCanvasH = Math.max(24, spaceAbove - gap - timeBlock);
+    const maxWVert = maxCanvasH * (16 / 9);
+
+    const maxWTrack = pw * 0.98;
+    const maxWPlayer = Math.max(1, pr.width - 2 * playerPad);
+    let w = Math.floor(Math.min(160, maxWVert, maxWTrack, maxWPlayer));
+    w = Math.max(24, w);
+
+    let lo;
+    let hi;
+    for (;;) {
+      const minCWrap = w / 2;
+      const maxCWrap = pw - w / 2;
+      const minCPlayer = pr.left + playerPad + w / 2 - wrap.left;
+      const maxCPlayer = pr.right - playerPad - w / 2 - wrap.left;
+      lo = Math.max(minCWrap, minCPlayer);
+      hi = Math.min(maxCWrap, maxCPlayer);
+      if (lo <= hi || w <= 24) break;
+      w -= 4;
+    }
+
+    const centerPx = lo <= hi ? Math.min(Math.max(r * pw, lo), hi) : pw / 2;
+    const xPct = (centerPx / pw) * 100;
+    scrubPreview.style.left = `${xPct}%`;
+    const h = Math.round((w * 9) / 16);
+    scrubPreview.style.setProperty("--scrub-preview-w", `${w}px`);
+    scrubPreview.style.setProperty("--scrub-preview-h", `${h}px`);
+  }
+
   function positionScrubPreview(clientX) {
     const rect = progressWrap.getBoundingClientRect();
     if (rect.width <= 0) return;
-    const xPct = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
-    scrubPreview.style.left = `${xPct}%`;
+    lastPreviewClientX = clientX;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    layoutScrubPreviewAtRatio(ratio);
   }
 
   function schedulePreviewSeek(t) {
@@ -361,11 +429,13 @@
   function updateScrubPreviewFromRatio(ratio) {
     const dur = video.duration;
     if (!Number.isFinite(dur) || dur <= 0) return;
-    const t = Math.min(1, Math.max(0, ratio)) * dur;
+    const clamped = Math.min(1, Math.max(0, ratio));
+    const t = clamped * dur;
     lastScrubTime = t;
     previewTimeEl.textContent = formatTime(t);
-    const xPct = Math.min(100, Math.max(0, ratio * 100));
-    scrubPreview.style.left = `${xPct}%`;
+    const rect = progressWrap.getBoundingClientRect();
+    lastPreviewClientX = rect.left + clamped * rect.width;
+    layoutScrubPreviewAtRatio(clamped);
     schedulePreviewSeek(t);
   }
 
@@ -595,8 +665,6 @@
   videoViewport.addEventListener("pointerup", endViewportPointer);
   videoViewport.addEventListener("pointercancel", endViewportPointer);
 
-  const chromeEl = player.querySelector(".player__chrome");
-
   const IDLE_UI_MS = 2000;
   let chromeIdleTimer = null;
 
@@ -618,9 +686,10 @@
       chromeIdleTimer = null;
       const ae = document.activeElement;
       if (
-        chromeEl &&
         ae instanceof HTMLElement &&
-        chromeEl.contains(ae)
+        ((chromeEl && chromeEl.contains(ae)) ||
+          (cornerTools && cornerTools.contains(ae)) ||
+          (cornerVolume && cornerVolume.contains(ae)))
       ) {
         ae.blur();
       }
@@ -643,7 +712,11 @@
   player.addEventListener("keydown", bumpChromeActivity, true);
   player.addEventListener("wheel", bumpChromeActivity, { passive: true });
   player.addEventListener("focusin", (e) => {
-    if (!chromeEl || !chromeEl.contains(e.target)) return;
+    if (!(e.target instanceof Node)) return;
+    const inChrome = chromeEl && chromeEl.contains(e.target);
+    const inCorner = cornerTools && cornerTools.contains(e.target);
+    const inCornerVolume = cornerVolume && cornerVolume.contains(e.target);
+    if (!inChrome && !inCorner && !inCornerVolume) return;
     exitChromeIdle();
     armChromeIdleTimer();
   });
@@ -862,16 +935,44 @@
       tooltipLayer.textContent = "";
     }
 
+    /** True if `node` is inside the interactive subtree of a `[data-tooltip]` host (not just a DOM ancestor). */
+    function isPointerOverTooltipHost(node) {
+      if (!(node instanceof Element)) return false;
+      const host = node.closest("[data-tooltip]");
+      if (!host) return false;
+      if (host.closest("#player")) {
+        const tag = host.tagName;
+        if (tag === "BUTTON" || tag === "LABEL" || tag === "SELECT") return true;
+        if (host.matches(".player__rate-select-wrap")) return true;
+        return false;
+      }
+      return true;
+    }
+
     function showTooltipFor(el) {
       const text = el.getAttribute("data-tooltip");
       if (!text) {
         hideTooltip();
         return;
       }
+      const hostPlayer = el.closest("#player");
+      if (hostPlayer instanceof HTMLElement) {
+        const probe =
+          playPause instanceof HTMLElement ? playPause : hostPlayer.querySelector(".player__btn");
+        if (probe instanceof HTMLElement) {
+          tooltipLayer.style.fontSize = getComputedStyle(probe).fontSize;
+        } else {
+          tooltipLayer.style.removeProperty("font-size");
+        }
+      } else {
+        tooltipLayer.style.removeProperty("font-size");
+      }
       tooltipLayer.textContent = text;
       tooltipLayer.hidden = false;
       const r = el.getBoundingClientRect();
-      const margin = 8;
+      const marginEm = 0.55;
+      const fs = parseFloat(getComputedStyle(tooltipLayer).fontSize) || 14;
+      const margin = Math.max(6, Math.round(fs * marginEm));
       const w = tooltipLayer.offsetWidth;
       const h = tooltipLayer.offsetHeight;
       let top = r.top - h - margin;
@@ -886,6 +987,10 @@
       "pointerover",
       (e) => {
         if (!(e.target instanceof Element)) return;
+        if (!isPointerOverTooltipHost(e.target)) {
+          hideTooltip();
+          return;
+        }
         const el = e.target.closest("[data-tooltip]");
         if (!el) {
           hideTooltip();
@@ -896,11 +1001,31 @@
       true
     );
 
+    document.addEventListener(
+      "pointerout",
+      (e) => {
+        if (!(e.target instanceof Element)) return;
+        const host = e.target.closest("[data-tooltip]");
+        if (!host) return;
+        const rt = e.relatedTarget;
+        if (rt instanceof Node && host.contains(rt)) return;
+        if (rt instanceof Element) {
+          const nextHost = rt.closest("[data-tooltip]");
+          if (nextHost && nextHost !== host) return;
+        }
+        hideTooltip();
+      },
+      true
+    );
+
+    player.addEventListener("pointerleave", hideTooltip);
+
     document.addEventListener("scroll", hideTooltip, true);
     window.addEventListener("resize", hideTooltip);
 
     document.addEventListener("focusin", (e) => {
       if (!(e.target instanceof Element)) return;
+      if (e.target.closest("#player")) return;
       const el = e.target.closest("[data-tooltip]");
       if (el) showTooltipFor(el);
       else hideTooltip();
@@ -910,6 +1035,10 @@
       requestAnimationFrame(() => {
         const a = document.activeElement;
         if (!(a instanceof Element)) {
+          hideTooltip();
+          return;
+        }
+        if (a.closest("#player")) {
           hideTooltip();
           return;
         }
@@ -939,4 +1068,17 @@
   syncPlaybackRateSelect();
   applyZoomTransform();
   updateTimeDisplay();
+
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => {
+      syncRatePillWidthToZoom();
+      if (scrubPreviewActive && lastPreviewClientX != null) {
+        positionScrubPreview(lastPreviewClientX);
+      }
+    });
+    ro.observe(player);
+    if (zoomGroup instanceof HTMLElement) ro.observe(zoomGroup);
+    if (cornerTools instanceof HTMLElement) ro.observe(cornerTools);
+  }
+  window.addEventListener("resize", syncRatePillWidthToZoom);
 })();
