@@ -51,20 +51,30 @@ jobs:
             throw "npm run dist failed: exit code $distCode"
           }
 
-          $unpacked = Join-Path (Get-Location) "dist/win-unpacked"
+          $distRoot = Join-Path (Get-Location) "dist"
+          if (-not (Test-Path $distRoot)) { throw "dist/ missing after electron-builder" }
+
+          $unpacked = Join-Path $distRoot "win-unpacked"
           if (-not (Test-Path $unpacked)) {
-            Write-Host "dist/ contents:"
-            if (Test-Path dist) { Get-ChildItem -Recurse dist }
-            throw "electron-builder did not produce dist/win-unpacked"
+            $pick = Get-ChildItem $distRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
+              (Get-ChildItem $_.FullName -Filter *.exe -File -ErrorAction SilentlyContinue).Count -gt 0
+            } | Select-Object -First 1
+            if ($pick) { $unpacked = $pick.FullName }
+          }
+          if (-not (Test-Path $unpacked)) {
+            Write-Host "dist/ top-level:"
+            Get-ChildItem $distRoot | ForEach-Object { Write-Host $_.Name }
+            throw "No unpacked Windows app folder under dist/"
           }
 
           $pkg = Get-Content package.json -Raw | ConvertFrom-Json
           $zipName = "$($pkg.name)-$($pkg.version)-Windows-x64.zip"
-          $zipPath = Join-Path (Get-Location) "dist/$zipName"
+          $zipPath = Join-Path $distRoot $zipName
           if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-          # Archive the whole tree (Compress-Archive -Path "dir\*" is not recursive into subfolders).
-          Compress-Archive -Path $unpacked -DestinationPath $zipPath -CompressionLevel Optimal
-          if (-not (Test-Path $zipPath)) { throw "failed to create $zipPath" }
+          # tar handles deep trees; Compress-Archive often fails on long Electron paths.
+          & tar.exe -a -c -f $zipPath -C $unpacked .
+          if ($LASTEXITCODE -ne 0) { throw "tar failed to create zip: exit $LASTEXITCODE" }
+          if (-not (Test-Path $zipPath)) { throw "zip not found at $zipPath" }
           Write-Host "Created $zipPath ($((Get-Item $zipPath).Length) bytes)"
 
       - name: Show build output on failure
@@ -75,7 +85,9 @@ jobs:
           if (Test-Path $log) {
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## electron-builder log (first 200 lines)"
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```text'
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value (Get-Content $log -TotalCount 200 -ErrorAction SilentlyContinue | Out-String)
+            $snippet = (Get-Content $log -TotalCount 200 -ErrorAction SilentlyContinue | Out-String)
+            if ($snippet.Length -gt 60000) { $snippet = $snippet.Substring(0, 60000) + "`n…(truncated)…" }
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $snippet
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
             Get-Content $log | ForEach-Object { Write-Host $_ }
           } else {
