@@ -26,7 +26,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          # Node 22 has had edge cases with native tooling used by electron-builder on Windows runners.
+          node-version: "20"
 
       - name: Build Windows installer (isolated copy)
         env:
@@ -48,9 +49,18 @@ jobs:
             npm ls --depth=0
             # Use cmd so exit codes are reliable when output is redirected (PowerShell `*>` can mask npm failures).
             cmd /c "npm run dist > build.log 2>&1"
-            if ($LASTEXITCODE -ne 0) {
-              Get-Content build.log -ErrorAction SilentlyContinue
-              throw "npm run dist failed: exit code $LASTEXITCODE"
+            $distCode = $LASTEXITCODE
+            if ($distCode -ne 0) {
+              $logPath = Join-Path (Get-Location) "build.log"
+              $repoLog = Join-Path $env:GITHUB_WORKSPACE "video-player/build.log"
+              if (Test-Path $logPath) {
+                Copy-Item -Force $logPath $repoLog
+                Write-Host "---- $logPath (tail 250 lines) ----"
+                Get-Content $logPath -Tail 250 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+              } else {
+                Write-Host "build.log missing at $logPath"
+              }
+              throw "npm run dist failed: exit code $distCode"
             }
           } finally {
             Pop-Location
@@ -80,13 +90,21 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          if (Test-Path build.log) {
-            $snippet = (Get-Content build.log -TotalCount 200 -ErrorAction SilentlyContinue | Out-String)
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## electron-builder log (first 200 lines)"
+          $candidates = @(
+            (Join-Path $env:GITHUB_WORKSPACE "video-player/build.log"),
+            (Join-Path $env:RUNNER_TEMP "vpbuild/build.log")
+          )
+          $log = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($log) {
+            $snippet = (Get-Content $log -TotalCount 200 -ErrorAction SilentlyContinue | Out-String)
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## electron-builder log (first 200 lines): $log"
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```text'
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $snippet
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
-            Get-Content build.log -ErrorAction SilentlyContinue
+            Write-Host "---- $log ----"
+            Get-Content $log -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+          } else {
+            Write-Host "No build.log found. Checked: $($candidates -join ', ')"
           }
           if (Test-Path dist) { Get-ChildItem -Recurse dist } else { Write-Host "dist/ missing" }
 

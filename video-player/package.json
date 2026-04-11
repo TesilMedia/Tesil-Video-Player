@@ -24,11 +24,13 @@
     "productName": "CustomVideoPlayer",
     "copyright": "Copyright © 2026",
     "npmRebuild": false,
+    "forceCodeSigning": false,
     "publish": "never",
     "directories": {
       "output": "dist"
     },
     "win": {
+      "signAndEditExecutable": false,
       "artifactName": "${name}-${version}-Windows-x64-Setup.${ext}",
       "target": [
         {
