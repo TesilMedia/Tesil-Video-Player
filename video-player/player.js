@@ -199,6 +199,17 @@
     lastMediaTime = null;
   }
 
+  /** While true, `stepByFrame` for that direction chains after each completed seek (comma/period hold). */
+  let frameKeyHeldBack = false;
+  let frameKeyHeldForward = false;
+
+  function frameKeyHeldForDirection(direction) {
+    return direction < 0 ? frameKeyHeldBack : frameKeyHeldForward;
+  }
+
+  /** Suppresses stale `seeked` UI when a newer frame-step seek was started. */
+  let frameStepGen = 0;
+
   function stepByFrame(direction) {
     if (!video.paused) video.pause();
     const dur = video.duration;
@@ -208,12 +219,53 @@
     const eps = fd * 0.02;
     const idx = Math.floor((video.currentTime + eps) / fd);
     const nextIdx = direction < 0 ? idx - 1 : idx + 1;
-    video.currentTime = Math.max(
+    const newTime = Math.max(
       0,
       Math.min(dur - Number.EPSILON, nextIdx * fd)
     );
-    syncProgressFromVideo();
-    updateTimeDisplay();
+
+    if (Math.abs(newTime - video.currentTime) < 1e-6) {
+      syncProgressFromVideo();
+      updateTimeDisplay();
+      return;
+    }
+
+    const myGen = (frameStepGen += 1);
+    video.addEventListener(
+      "seeked",
+      () => {
+        if (myGen !== frameStepGen) return;
+        syncProgressFromVideo();
+        updateTimeDisplay();
+        if (!frameKeyHeldForDirection(direction)) return;
+        // Paused video: `requestVideoFrameCallback` often never fires, so holds would stop after
+        // one frame. `requestAnimationFrame` runs after the seeked paint path on the main thread.
+        requestAnimationFrame(() => {
+          if (!frameKeyHeldForDirection(direction)) return;
+          stepByFrame(direction);
+        });
+      },
+      { once: true }
+    );
+    video.currentTime = newTime;
+  }
+
+  function frameStepDirectionFromKeyEvent(e) {
+    if (e.key === ",") return -1;
+    if (e.key === ".") return 1;
+    if (e.code === "Comma") return -1;
+    if (e.code === "Period") return 1;
+    return null;
+  }
+
+  function clearFrameKeyHoldDirection(direction) {
+    if (direction === -1) frameKeyHeldBack = false;
+    else frameKeyHeldForward = false;
+  }
+
+  function clearAllFrameKeyHold() {
+    frameKeyHeldBack = false;
+    frameKeyHeldForward = false;
   }
 
   function revokeBlobUrl() {
@@ -863,6 +915,15 @@
       if (!e.repeat) nudgePlaybackRate(1);
       return;
     }
+    const frameDir = frameStepDirectionFromKeyEvent(e);
+    if (frameDir != null) {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (frameDir === -1) frameKeyHeldBack = true;
+      else frameKeyHeldForward = true;
+      stepByFrame(frameDir);
+      return;
+    }
     const step = 5;
     switch (e.key) {
       case " ":
@@ -901,12 +962,6 @@
         e.preventDefault();
         fullscreenBtn.click();
         break;
-      case ",":
-      case ".":
-        e.preventDefault();
-        if (e.repeat) break;
-        stepByFrame(e.key === "," ? -1 : 1);
-        break;
       case "+":
       case "=":
         e.preventDefault();
@@ -924,6 +979,17 @@
       default:
         break;
     }
+  });
+
+  player.addEventListener("keyup", (e) => {
+    if (e.target !== player && !player.contains(e.target)) return;
+    const frameDir = frameStepDirectionFromKeyEvent(e);
+    if (frameDir != null) clearFrameKeyHoldDirection(frameDir);
+  });
+
+  window.addEventListener("blur", clearAllFrameKeyHold);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") clearAllFrameKeyHold();
   });
 
   player.tabIndex = 0;
