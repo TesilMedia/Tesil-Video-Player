@@ -1,4 +1,5 @@
-# One portable .exe per release (double-click to run). Build runs under C:\vp so NSIS paths stay short.
+# Builds the app with electron-builder "dir" (no NSIS), zips the folder to one file for Releases.
+# Users: download the .zip, Extract All, run CustomVideoPlayer.exe.
 
 name: Windows release
 
@@ -21,7 +22,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Build portable .exe
+      - name: Build and zip
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           ELECTRON_BUILDER_CACHE: C:\eb
@@ -42,24 +43,41 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "npm install failed: exit code $LASTEXITCODE" }
 
           cmd /c "npm run dist > build.log 2>&1"
-          $code = $LASTEXITCODE
-          if ($code -ne 0) {
+          if ($LASTEXITCODE -ne 0) {
             Copy-Item build.log (Join-Path $src "build.log") -Force -ErrorAction SilentlyContinue
-            Write-Host "---- build.log (tail 200) ----"
-            Get-Content build.log -Tail 200 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
-            throw "electron-builder failed: exit code $code"
+            Get-Content build.log -Tail 200 | ForEach-Object { Write-Host $_ }
+            throw "electron-builder failed: exit code $LASTEXITCODE"
           }
 
-          $distSrc = Join-Path $b "dist"
+          $distRoot = Join-Path $b "dist"
+          $unpacked = Join-Path $distRoot "win-unpacked"
+          if (-not (Test-Path $unpacked)) {
+            $pick = Get-ChildItem $distRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
+              (Get-ChildItem $_.FullName -Filter *.exe -File -ErrorAction SilentlyContinue).Count -gt 0
+            } | Select-Object -First 1
+            if ($pick) { $unpacked = $pick.FullName }
+          }
+          if (-not (Test-Path $unpacked)) {
+            Get-ChildItem $distRoot | ForEach-Object { Write-Host $_.Name }
+            throw "No unpacked app under dist/"
+          }
+
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $zipName = "$($pkg.build.productName)-$($pkg.version)-Windows-x64.zip"
+          $zipPath = Join-Path $distRoot $zipName
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          & tar.exe -a -c -f $zipPath -C $unpacked .
+          if ($LASTEXITCODE -ne 0) { throw "tar failed: exit code $LASTEXITCODE" }
+
           $distDest = Join-Path $src "dist"
           New-Item -ItemType Directory -Force -Path $distDest | Out-Null
-          Copy-Item (Join-Path $distSrc "*") $distDest -Recurse -Force
+          Copy-Item $zipPath $distDest -Force
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: video-player/dist/*.exe
+          files: video-player/dist/*.zip
           fail_on_unmatched_files: true
           generate_release_notes: true
         env:
@@ -69,8 +87,8 @@ jobs:
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: CustomVideoPlayer-Windows-Portable
-          path: video-player/dist/*.exe
+          name: CustomVideoPlayer-Windows
+          path: video-player/dist/*.zip
 
       - name: Logs on failure
         if: failure()
