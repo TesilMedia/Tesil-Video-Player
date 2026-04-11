@@ -1,6 +1,6 @@
 {
   "name": "custom-video-player",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "Custom video player for Windows (desktop)",
   "author": "becknerd",
@@ -26,16 +26,6 @@
     "directories": {
       "output": "dist"
     },
-    "files": [
-      "electron-main.cjs",
-      "preload.cjs",
-      "index.html",
-      "player.js",
-      "styles.css",
-      "manifest.webmanifest",
-      "sw.js",
-      "icons/**/*"
-    ],
     "win": {
       "artifactName": "${name}-${version}-Windows-x64-Setup.${ext}",
       "target": [
@@ -48,10 +38,7 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "allowElevation": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "CustomVideoPlayer"
+      "allowElevation": true
     }
   }
 }

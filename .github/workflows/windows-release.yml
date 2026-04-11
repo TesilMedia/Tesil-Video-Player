@@ -1,7 +1,7 @@
 # Builds a Windows NSIS installer (.exe) and attaches it to a GitHub Release when you push a version tag.
 # Non-technical users: open Releases and download the Setup .exe (no Node.js required).
 
-name: Windows portable exe
+name: Windows release
 
 on:
   push:
@@ -43,7 +43,14 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          if (Test-Path build.log) { Get-Content build.log -ErrorAction SilentlyContinue }
+          if (Test-Path build.log) {
+            $snippet = (Get-Content build.log -TotalCount 200 -ErrorAction SilentlyContinue | Out-String)
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## electron-builder log (first 200 lines)"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```text'
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $snippet
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
+            Get-Content build.log -ErrorAction SilentlyContinue
+          }
           if (Test-Path dist) { Get-ChildItem -Recurse dist } else { Write-Host "dist/ missing" }
 
       - name: Upload logs on failure
