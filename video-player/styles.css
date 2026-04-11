@@ -17,9 +17,11 @@
   --chrome-control-bg-hover: #383d47;
   --chrome-control-border: rgba(255, 255, 255, 0.14);
   --chrome-track: #454a56;
-  --chrome-control-height: 2.25rem;
+  --chrome-control-height: 2.5rem;
+  /* Match progress-to-bar spacing with `.player__bar` inter-control gap */
+  --chrome-gap: 0.45rem;
   /* Unified size for labels, time, speed dropdown, and bar buttons */
-  --chrome-font-size: 0.8125rem;
+  --chrome-font-size: 0.875rem;
 }
 
 body {
@@ -117,8 +119,15 @@ body {
   aspect-ratio: 16 / 9;
 }
 
+/* Root is focusable (tabIndex); kill UA / :focus-visible rings on the shell */
+.player:focus,
+.player:focus-visible,
 .player:focus-within {
   outline: none;
+}
+
+.player:focus-visible {
+  box-shadow: none;
 }
 
 .player__viewport {
@@ -190,7 +199,7 @@ body {
   right: 0;
   bottom: 0;
   z-index: 2;
-  padding: 0.5rem 0.45rem;
+  padding: 0.95rem 0.75rem 0.6rem;
   background: transparent;
   opacity: 0;
   transition: opacity 0.2s ease;
@@ -203,6 +212,43 @@ body {
 .player .player__chrome:focus-within,
 .player:not(.player--idle):focus-within .player__chrome {
   opacity: 1;
+}
+
+/*
+ * No focus ring on player chrome. After a mouse click, the next keypress can
+ * promote :focus-visible in Chromium; outline + box-shadow must both be cleared.
+ * Universal descendant covers any future control types.
+ */
+.player__chrome *:focus,
+.player__chrome *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.player__chrome button::-moz-focus-inner {
+  border: 0;
+}
+
+/* Firefox: range inputs use ::-moz-focus-outer instead of outline on the host */
+.player__progress::-moz-focus-outer,
+.player__volume-slider::-moz-focus-outer {
+  border: 0;
+}
+
+/*
+ * WebKit/Blink: focused range thumbs can still show a focus ring; keep the same
+ * thumb treatment as unfocused (progress already uses a subtle shadow on the thumb).
+ */
+.player__progress:focus::-webkit-slider-thumb,
+.player__progress:focus-visible::-webkit-slider-thumb {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
+.player__volume-slider:focus::-webkit-slider-thumb,
+.player__volume-slider:focus-visible::-webkit-slider-thumb {
+  outline: none;
+  box-shadow: none;
 }
 
 /*
@@ -235,10 +281,9 @@ body {
 
 .player__progress-wrap {
   position: relative;
-  margin-bottom: 0.35rem;
+  margin-bottom: var(--chrome-gap);
   display: flex;
   align-items: center;
-  min-height: var(--chrome-control-height);
 }
 
 .player__scrub-preview {
@@ -324,7 +369,7 @@ body {
 .player__bar {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: var(--chrome-gap);
   flex-wrap: nowrap;
   min-height: var(--chrome-control-height);
   min-width: min-content;
@@ -338,7 +383,7 @@ body {
   display: inline-flex;
   align-items: stretch;
   justify-content: center;
-  gap: 0.05rem;
+  gap: 0.125rem;
   box-sizing: border-box;
   width: max-content;
   flex-shrink: 0;
@@ -354,9 +399,11 @@ body {
   align-self: stretch;
   height: auto;
   min-height: 0;
-  padding: 0 0.18rem;
+  padding: 0 0.28rem;
   background: transparent;
   border: none;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .player__zoom-group .player__btn:hover {
@@ -366,7 +413,7 @@ body {
 .player__btn--zoom-reset {
   min-width: 0;
   max-width: 100%;
-  padding: 0 0.35rem;
+  padding: 0 0.45rem;
   font-size: var(--chrome-font-size);
   font-variant-numeric: tabular-nums;
 }
@@ -379,12 +426,6 @@ body {
   aspect-ratio: 1;
 }
 
-.player__btn--pip {
-  font-size: var(--chrome-font-size);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
 .player__btn {
   box-sizing: border-box;
   height: var(--chrome-control-height);
@@ -394,7 +435,7 @@ body {
   border: 1px solid var(--chrome-control-border);
   background: var(--chrome-control-bg);
   color: #fff;
-  padding: 0 0.55rem;
+  padding: 0 0.7rem;
   border-radius: 6px;
   cursor: pointer;
   font-size: var(--chrome-font-size);
@@ -406,8 +447,12 @@ body {
   background: var(--chrome-control-bg-hover);
 }
 
-.player__btn:focus-visible {
-  box-shadow: var(--focus);
+/* Match `.player__time-group .player__time` (normal weight + muted white) */
+.player__btn.player__btn--pip {
+  font-size: var(--chrome-font-size);
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.03em;
 }
 
 .icon-play {
@@ -480,7 +525,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 0.35rem;
+  padding: 0 0.5rem;
   text-align: center;
   font-size: var(--chrome-font-size);
   font-variant-numeric: tabular-nums;
@@ -490,8 +535,8 @@ body {
 
 .player__btn--frame {
   flex-shrink: 0;
-  width: 1.35rem;
-  min-width: 1.35rem;
+  width: 1.55rem;
+  min-width: 1.55rem;
   align-self: stretch;
   height: auto;
   min-height: 0;
@@ -510,10 +555,6 @@ body {
   background: var(--chrome-control-bg-hover);
 }
 
-.player__btn--frame:focus-visible {
-  box-shadow: var(--focus);
-}
-
 .icon-frame-arrow {
   display: block;
 }
@@ -523,7 +564,7 @@ body {
   display: inline-flex;
   align-items: stretch;
   justify-content: center;
-  gap: 0.05rem;
+  gap: 0.125rem;
   width: max-content;
   flex-shrink: 0;
   height: var(--chrome-control-height);
@@ -538,9 +579,11 @@ body {
   align-self: stretch;
   height: auto;
   min-height: 0;
-  padding: 0 0.18rem;
+  padding: 0 0.28rem;
   background: transparent;
   border: none;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .player__rate .player__btn:hover {
@@ -553,7 +596,7 @@ body {
   display: flex;
   align-items: stretch;
   align-self: stretch;
-  min-width: 3.25rem;
+  min-width: 3.5rem;
 }
 
 .player__rate-select {
@@ -564,15 +607,15 @@ body {
   min-height: 0;
   margin: 0;
   font-size: var(--chrome-font-size);
-  font-weight: 600;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.95);
   background: transparent;
   background-image: none;
   border: none;
   box-shadow: none;
   border-radius: 6px;
-  padding: 0 0.35rem;
+  padding: 0 0.45rem;
   cursor: pointer;
   text-align: center;
   text-align-last: center;
@@ -585,11 +628,6 @@ body {
   display: none;
 }
 
-.player__rate-select:focus-visible {
-  box-shadow: var(--focus);
-  outline: none;
-}
-
 .player__rate-select option {
   background: var(--chrome-control-bg);
   color: #fff;
@@ -600,7 +638,7 @@ body {
   display: inline-flex;
   align-items: stretch;
   justify-content: center;
-  gap: 0.12rem;
+  gap: 0.22rem;
   width: max-content;
   flex-shrink: 0;
   height: var(--chrome-control-height);
@@ -615,7 +653,7 @@ body {
   align-self: stretch;
   height: auto;
   min-height: 0;
-  padding: 0 0.12rem;
+  padding: 0 0.22rem;
   background: transparent;
   border: none;
 }
@@ -629,9 +667,9 @@ body {
   --vol-track-h: 4px;
   align-self: center;
   flex: 1 1 auto;
-  min-width: 56px;
+  min-width: 88px;
   width: 0;
-  max-width: 14rem;
+  max-width: 18rem;
   height: var(--vol-thumb);
   -webkit-appearance: none;
   appearance: none;
