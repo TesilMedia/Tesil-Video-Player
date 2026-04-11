@@ -1,5 +1,4 @@
-# Builds Windows app via electron-builder "dir" (no NSIS), zips win-unpacked, attaches .zip on version tags.
-# NSIS/portable still invoke makensis; "dir" avoids that (see electron-builder#8346 / long paths on CI).
+# One portable .exe per release (double-click to run). Build runs under C:\vp so NSIS paths stay short.
 
 name: Windows release
 
@@ -13,110 +12,69 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: video-player
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
-      - name: Build Windows (dir target) and zip
+      - name: Build portable .exe
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          ELECTRON_BUILDER_CACHE: C:\eb
         shell: pwsh
         run: |
-          $env:ELECTRON_BUILDER_CACHE = Join-Path $env:USERPROFILE "eb-cache"
-          New-Item -ItemType Directory -Force -Path $env:ELECTRON_BUILDER_CACHE | Out-Null
+          $src = Join-Path $env:GITHUB_WORKSPACE "video-player"
+          $b = "C:\vp"
+          foreach ($p in @($b, $env:ELECTRON_BUILDER_CACHE)) {
+            if (Test-Path $p) { Remove-Item $p -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path $p | Out-Null
+          }
 
-          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          robocopy $src $b /E /XD node_modules dist /NFL /NDL /NJH /NJS /NP | Out-Host
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed: exit code $LASTEXITCODE" }
 
+          Set-Location $b
           npm install --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { throw "npm install failed: exit code $LASTEXITCODE" }
 
           cmd /c "npm run dist > build.log 2>&1"
-          $distCode = $LASTEXITCODE
-          if ($distCode -ne 0) {
-            Write-Host "---- build.log (tail 250 lines) ----"
-            if (Test-Path build.log) {
-              Get-Content build.log -Tail 250 | ForEach-Object { Write-Host $_ }
-            }
-            throw "npm run dist failed: exit code $distCode"
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Copy-Item build.log (Join-Path $src "build.log") -Force -ErrorAction SilentlyContinue
+            Write-Host "---- build.log (tail 200) ----"
+            Get-Content build.log -Tail 200 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+            throw "electron-builder failed: exit code $code"
           }
 
-          $distRoot = Join-Path (Get-Location) "dist"
-          if (-not (Test-Path $distRoot)) { throw "dist/ missing after electron-builder" }
+          $distSrc = Join-Path $b "dist"
+          $distDest = Join-Path $src "dist"
+          New-Item -ItemType Directory -Force -Path $distDest | Out-Null
+          Copy-Item (Join-Path $distSrc "*") $distDest -Recurse -Force
 
-          $unpacked = Join-Path $distRoot "win-unpacked"
-          if (-not (Test-Path $unpacked)) {
-            $pick = Get-ChildItem $distRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
-              (Get-ChildItem $_.FullName -Filter *.exe -File -ErrorAction SilentlyContinue).Count -gt 0
-            } | Select-Object -First 1
-            if ($pick) { $unpacked = $pick.FullName }
-          }
-          if (-not (Test-Path $unpacked)) {
-            Write-Host "dist/ top-level:"
-            Get-ChildItem $distRoot | ForEach-Object { Write-Host $_.Name }
-            throw "No unpacked Windows app folder under dist/"
-          }
-
-          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
-          $zipName = "$($pkg.name)-$($pkg.version)-Windows-x64.zip"
-          $zipPath = Join-Path $distRoot $zipName
-          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-          # tar handles deep trees; Compress-Archive often fails on long Electron paths.
-          & tar.exe -a -c -f $zipPath -C $unpacked .
-          if ($LASTEXITCODE -ne 0) { throw "tar failed to create zip: exit $LASTEXITCODE" }
-          if (-not (Test-Path $zipPath)) { throw "zip not found at $zipPath" }
-          Write-Host "Created $zipPath ($((Get-Item $zipPath).Length) bytes)"
-
-      - name: Show build output on failure
-        if: failure()
-        shell: pwsh
-        run: |
-          $log = Join-Path $env:GITHUB_WORKSPACE "video-player/build.log"
-          if (Test-Path $log) {
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## electron-builder log (first 200 lines)"
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```text'
-            $snippet = (Get-Content $log -TotalCount 200 -ErrorAction SilentlyContinue | Out-String)
-            if ($snippet.Length -gt 60000) { $snippet = $snippet.Substring(0, 60000) + "`n…(truncated)…" }
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $snippet
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
-            Get-Content $log | ForEach-Object { Write-Host $_ }
-          } else {
-            Write-Host "No video-player/build.log (dist may have failed before log write)"
-          }
-          if (Test-Path dist) { Get-ChildItem -Recurse dist } else { Write-Host "dist/ missing" }
-
-      - name: Upload logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-failure-logs
-          path: |
-            video-player/build.log
-            video-player/npm-debug.log
-
-      - name: Publish GitHub Release (version tags only)
+      - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: video-player/dist/*.zip
-          fail_on_unmatched_files: false
+          files: video-player/dist/*.exe
+          fail_on_unmatched_files: true
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload build artifact (manual test runs)
+      - name: Upload artifact (manual runs)
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: custom-video-player-windows-zip
-          path: video-player/dist/*.zip
+          name: CustomVideoPlayer-Windows-Portable
+          path: video-player/dist/*.exe
+
+      - name: Logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $p = Join-Path $env:GITHUB_WORKSPACE "video-player/build.log"
+          if (Test-Path $p) { Get-Content $p -Tail 200 }

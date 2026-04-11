@@ -4,18 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f1114" />
-    <meta name="mobile-web-app-capable" content="yes" />
     <title>Custom video player</title>
-    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="page">
       <h1 class="title">Custom video player</h1>
-      <p id="pwaInstallHint" class="install-hint">
-        Open this folder over <code>http://localhost</code> in Chrome or Edge, use
-        <strong>Install this site as an app</strong>, then in File Explorer use
-        <strong>Open with</strong> on a video file and pick the installed player.
+      <p id="introHint" class="intro-hint">
+        <strong>Windows:</strong> download <strong>CustomVideoPlayer</strong> from this project’s
+        <a href="https://github.com/becknerd/Tesil-Player/releases">Releases</a>, run the
+        <code>.exe</code>, then use <strong>Open video file</strong> or double-click a video in Explorer.
+        You can also try a file below in this browser window.
       </p>
 
       <div class="upload-row">
@@ -307,18 +306,6 @@
       </section>
     </main>
     <div id="tooltipLayer" class="tooltip-layer" role="tooltip" hidden></div>
-    <script>
-      (function () {
-        var isElectron =
-          typeof navigator !== "undefined" &&
-          /Electron/i.test(navigator.userAgent);
-        if (!isElectron && "serviceWorker" in navigator) {
-          navigator.serviceWorker
-            .register("sw.js", { scope: "./" })
-            .catch(function () {});
-        }
-      })();
-    </script>
     <script src="player.js"></script>
   </body>
 </html>

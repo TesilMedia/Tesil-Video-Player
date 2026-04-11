@@ -1305,7 +1305,7 @@
   window.addEventListener("resize", syncRatePillWidthToZoom);
 
   if (typeof window.videoPlayerNative !== "undefined") {
-    const hint = document.getElementById("pwaInstallHint");
+    const hint = document.getElementById("introHint");
     if (hint instanceof HTMLElement) hint.hidden = true;
 
     pendingNativeInitial = true;
