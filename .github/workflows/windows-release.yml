@@ -102,8 +102,10 @@ jobs:
           $cfgLines = @(
             ';!@Install@!UTF-8!'
             'Title="Tesil Media Player"'
-            'BeginPrompt="This will extract Tesil Media Player into a subfolder and start it."'
-            'GUIMode="2"'
+            'BeginPrompt="This will extract Tesil Media Player to your Downloads folder (you can change the path) and start it."'
+            'InstallPath="%USERPROFILE%\Downloads\Tesil Media Player"'
+            'ExtractPathText="Extract to:"'
+            'GUIFlags="64+4096"'
             "RunProgram=`"$runRel`""
           )
           [IO.File]::WriteAllLines($cfg, $cfgLines, [Text.UTF8Encoding]::new($false))
