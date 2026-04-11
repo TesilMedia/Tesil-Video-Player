@@ -9,17 +9,6 @@
   <body>
     <main class="page">
       <h1 class="title">Custom video player</h1>
-      <p class="hint">
-        Use <strong>Open video file</strong> to play a local file, or set a <code>src</code> in
-        <code>index.html</code> for a URL. Keyboard: Space play/pause, ←/→ seek, <kbd>,</kbd> /
-        <kbd>.</kbd> one frame back/forward (timing is learned while playing via the browser; until
-        then fallback is 1/30 s. OS key-repeat ignored).
-        Zoom: toolbar buttons, <kbd>+</kbd>/<kbd>-</kbd>/<kbd>0</kbd>, or mouse wheel toward the
-        cursor while it is over the player; drag to pan when zoomed; video tap play/pause only at 100% zoom
-        (use the bar play button when zoomed). ↑/↓ volume, M mute; volume slider at top left. Zoom and speed are at the top right. F fullscreen. Use the speed dropdown or <kbd>[</kbd> / <kbd>]</kbd> (when the player has
-        focus). Hover near the seek bar for a frame preview. Click the
-        video or player so it has focus for shortcuts.
-      </p>
 
       <div class="upload-row">
         <input
@@ -293,6 +282,22 @@
           </div>
         </div>
       </div>
+
+      <section class="commands" aria-label="Shortcuts">
+        <h2 class="commands__title">Shortcuts</h2>
+        <ul class="commands__list">
+          <li><kbd>Space</kbd> Play / pause</li>
+          <li><kbd>←</kbd> <kbd>→</kbd> Seek ±5 s</li>
+          <li><kbd>,</kbd> <kbd>.</kbd> Previous / next frame</li>
+          <li><kbd>↑</kbd> <kbd>↓</kbd> Volume</li>
+          <li><kbd>M</kbd> Mute</li>
+          <li><kbd>F</kbd> Fullscreen</li>
+          <li><kbd>[</kbd> <kbd>]</kbd> Slower / faster playback</li>
+          <li><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd> Zoom in / out / reset</li>
+          <li>Scroll wheel on video — zoom toward pointer</li>
+          <li>Drag video when zoomed — pan</li>
+        </ul>
+      </section>
     </main>
     <div id="tooltipLayer" class="tooltip-layer" role="tooltip" hidden></div>
     <script src="player.js"></script>

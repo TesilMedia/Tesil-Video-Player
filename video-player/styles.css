@@ -45,18 +45,45 @@ body {
   margin: 0 0 0.5rem;
 }
 
-.hint {
-  margin: 0 0 1.25rem;
-  font-size: 0.875rem;
-  color: var(--muted);
-  line-height: 1.5;
+.commands {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.hint code {
+.commands__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.commands__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   font-size: 0.8125rem;
+  color: var(--muted);
+  line-height: 1.65;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.commands kbd {
+  display: inline-block;
+  min-width: 1.35em;
+  margin-right: 0.15rem;
+  padding: 0.1em 0.4em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text);
   background: var(--surface);
-  padding: 0.1em 0.35em;
+  border: 1px solid var(--chrome-control-border);
   border-radius: 4px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
 }
 
 .upload-row {
