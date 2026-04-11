@@ -37,6 +37,15 @@
   const PREVIEW_H = 90;
 
   let blobUrl = null;
+  /** True after a user-chosen file, OS file launch, or drop (not the built-in sample). */
+  let hasCustomSource = false;
+
+  const DEMO_SAMPLE_URL =
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+
+  /** Desktop (Electron): waiting for native initial path so we do not flash the web demo. */
+  let pendingNativeInitial = false;
+
   let scrubPreviewActive = false;
   /** Last pointer X while preview is shown; used to reflow size on resize. */
   let lastPreviewClientX = null;
@@ -286,6 +295,98 @@
       blobUrl = null;
     }
   }
+
+  function isVideoFile(file) {
+    if (!(file instanceof File)) return false;
+    if (file.type && file.type.startsWith("video/")) return true;
+    return /\.(mp4|webm|mkv|mov|m4v|ogv|ogg|avi|3gp|3g2)$/i.test(file.name);
+  }
+
+  function loadVideoFromFile(file) {
+    if (!isVideoFile(file)) return;
+    hasCustomSource = true;
+    revokeBlobUrl();
+    blobUrl = URL.createObjectURL(file);
+    video.src = blobUrl;
+    if (fileNameEl instanceof HTMLElement) fileNameEl.textContent = file.name;
+    video.load();
+    syncPreviewVideoSrc();
+    video.playbackRate = 1;
+    playbackRateSelect.value = "1";
+    video.play().catch(() => {});
+  }
+
+  function loadVideoFromNativePayload(payload) {
+    if (!payload || !payload.url) return;
+    hasCustomSource = true;
+    revokeBlobUrl();
+    video.src = payload.url;
+    if (fileNameEl instanceof HTMLElement) {
+      fileNameEl.textContent = payload.displayName || "";
+    }
+    video.load();
+    syncPreviewVideoSrc();
+    video.playbackRate = 1;
+    playbackRateSelect.value = "1";
+    video.play().catch(() => {});
+  }
+
+  /** True while the OS launch queue is still delivering file handle(s). */
+  let pendingOsFileOpen = false;
+
+  if ("launchQueue" in window && typeof window.launchQueue.setConsumer === "function") {
+    window.launchQueue.setConsumer(async (launchParams) => {
+      pendingOsFileOpen = true;
+      try {
+        let raw = launchParams.files;
+        if (raw && typeof raw.then === "function") raw = await raw;
+        if (!raw) return;
+
+        if (typeof raw[Symbol.asyncIterator] === "function") {
+          for await (const handle of raw) {
+            const file = await handle.getFile();
+            if (isVideoFile(file)) {
+              loadVideoFromFile(file);
+              return;
+            }
+          }
+          return;
+        }
+
+        const list = Array.isArray(raw) ? raw : Array.from(raw);
+        for (const handle of list) {
+          const file = await handle.getFile();
+          if (isVideoFile(file)) {
+            loadVideoFromFile(file);
+            return;
+          }
+        }
+      } catch (_) {
+        /* ignore */
+      } finally {
+        pendingOsFileOpen = false;
+      }
+    });
+  }
+
+  function applyDemoSampleIfNeeded() {
+    if (hasCustomSource || pendingOsFileOpen || pendingNativeInitial || blobUrl) return;
+    if (video.currentSrc) return;
+    video.src = DEMO_SAMPLE_URL;
+    if (fileNameEl instanceof HTMLElement) fileNameEl.textContent = "";
+    video.load();
+    syncPreviewVideoSrc();
+    syncPlaybackRateSelect();
+    applyZoomTransform();
+    updateTimeDisplay();
+    video.play().catch(() => {});
+    setState(!video.paused);
+  }
+
+  window.addEventListener("load", () => {
+    applyDemoSampleIfNeeded();
+    window.setTimeout(applyDemoSampleIfNeeded, 350);
+  });
 
   function syncPreviewVideoSrc() {
     const src = video.currentSrc || video.src;
@@ -904,16 +1005,19 @@
     const file = fileInput.files && fileInput.files[0];
     fileInput.value = "";
     if (!file) return;
+    loadVideoFromFile(file);
+  });
 
-    revokeBlobUrl();
-    blobUrl = URL.createObjectURL(file);
-    video.src = blobUrl;
-    fileNameEl.textContent = file.name;
-    video.load();
-    syncPreviewVideoSrc();
-    video.playbackRate = 1;
-    playbackRateSelect.value = "1";
-    video.play().catch(() => {});
+  window.addEventListener("dragover", (e) => {
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    e.preventDefault();
+  });
+
+  window.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const dt = e.dataTransfer;
+    if (!dt || !dt.files || !dt.files.length) return;
+    loadVideoFromFile(dt.files[0]);
   });
 
   muteBtn.addEventListener("click", () => {
@@ -1173,7 +1277,10 @@
       tooltipLayer.hidden = true;
       tooltipLayer.textContent = "";
     }
-    if (!e.persisted) revokeBlobUrl();
+    if (!e.persisted) {
+      revokeBlobUrl();
+      hasCustomSource = false;
+    }
   });
 
   volumeSlider.value = String(video.volume);
@@ -1196,4 +1303,29 @@
     if (cornerTools instanceof HTMLElement) ro.observe(cornerTools);
   }
   window.addEventListener("resize", syncRatePillWidthToZoom);
+
+  if (typeof window.videoPlayerNative !== "undefined") {
+    const hint = document.getElementById("pwaInstallHint");
+    if (hint instanceof HTMLElement) hint.hidden = true;
+
+    pendingNativeInitial = true;
+    window.videoPlayerNative
+      .getInitialVideoPayload()
+      .then((payload) => {
+        pendingNativeInitial = false;
+        if (payload && payload.url) {
+          loadVideoFromNativePayload(payload);
+          return;
+        }
+        applyDemoSampleIfNeeded();
+      })
+      .catch(() => {
+        pendingNativeInitial = false;
+        applyDemoSampleIfNeeded();
+      });
+
+    window.videoPlayerNative.onOpenVideoPayload((payload) => {
+      if (payload && payload.url) loadVideoFromNativePayload(payload);
+    });
+  }
 })();

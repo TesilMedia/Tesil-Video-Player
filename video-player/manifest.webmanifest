@@ -1,0 +1,26 @@
+{
+  "name": "Custom video player",
+  "short_name": "Video player",
+  "description": "Local video player with zoom, frame step, and scrub preview.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1114",
+  "theme_color": "#0f1114",
+  "icons": [
+    {
+      "src": "icons/app.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "./index.html",
+      "accept": {
+        "video/*": [".mp4", ".webm", ".ogv", ".ogg", ".mov", ".m4v", ".avi", ".mkv", ".3gp", ".3g2"]
+      }
+    }
+  ]
+}

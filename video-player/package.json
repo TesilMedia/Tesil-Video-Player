@@ -1,0 +1,58 @@
+{
+  "name": "custom-video-player",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Custom video player for Windows (desktop)",
+  "main": "electron-main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64",
+    "dist:installer": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.4.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.custom.videoplayer",
+    "productName": "Custom Video Player",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron-main.cjs",
+      "preload.cjs",
+      "index.html",
+      "player.js",
+      "styles.css",
+      "manifest.webmanifest",
+      "sw.js",
+      "icons/**/*"
+    ],
+    "win": {
+      "artifactName": "${name}-${version}-Windows-x64.${ext}",
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true
+    },
+    "fileAssociations": [
+      {
+        "ext": ["mp4", "m4v", "webm", "mkv", "mov", "ogv", "ogg", "avi", "3gp", "3g2", "wmv"],
+        "name": "Video file",
+        "description": "Open with Custom Video Player",
+        "role": "Viewer"
+      }
+    ]
+  }
+}

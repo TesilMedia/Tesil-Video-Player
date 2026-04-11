@@ -3,12 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1114" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Custom video player</title>
+    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="page">
       <h1 class="title">Custom video player</h1>
+      <p id="pwaInstallHint" class="install-hint">
+        Open this folder over <code>http://localhost</code> in Chrome or Edge, use
+        <strong>Install this site as an app</strong>, then in File Explorer use
+        <strong>Open with</strong> on a video file and pick the installed player.
+      </p>
 
       <div class="upload-row">
         <input
@@ -35,7 +43,6 @@
               playsinline
               preload="metadata"
               draggable="false"
-              src="https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
             >
               Your browser does not support HTML5 video.
             </video>
@@ -300,6 +307,18 @@
       </section>
     </main>
     <div id="tooltipLayer" class="tooltip-layer" role="tooltip" hidden></div>
+    <script>
+      (function () {
+        var isElectron =
+          typeof navigator !== "undefined" &&
+          /Electron/i.test(navigator.userAgent);
+        if (!isElectron && "serviceWorker" in navigator) {
+          navigator.serviceWorker
+            .register("sw.js", { scope: "./" })
+            .catch(function () {});
+        }
+      })();
+    </script>
     <script src="player.js"></script>
   </body>
 </html>
