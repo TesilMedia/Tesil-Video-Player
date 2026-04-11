@@ -1,5 +1,5 @@
-# Builds a Windows portable .exe (no installer wizard) and attaches it to a GitHub Release on version tags.
-# Portable avoids NSIS/makensis issues on runners (path length, tooling). Users run the .exe directly.
+# Builds Windows app via electron-builder "dir" (no NSIS), zips win-unpacked, attaches .zip on version tags.
+# NSIS/portable still invoke makensis; "dir" avoids that (see electron-builder#8346 / long paths on CI).
 
 name: Windows release
 
@@ -26,89 +26,60 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          # Node 22 has had edge cases with native tooling used by electron-builder on Windows runners.
           node-version: "20"
 
-      - name: Build Windows installer (isolated copy)
+      - name: Build Windows (dir target) and zip
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         shell: pwsh
         run: |
-          # Short paths under the profile (avoid MAX_PATH + NSIS !include issues; see electron-builder#8346).
-          $cache = Join-Path $env:USERPROFILE "eb-cache"
-          $vp = Join-Path $env:USERPROFILE "vpb"
-          $env:ELECTRON_BUILDER_CACHE = $cache
-          if (Test-Path $vp) { Remove-Item $vp -Recurse -Force }
-          New-Item -ItemType Directory -Path $vp | Out-Null
-          New-Item -ItemType Directory -Force -Path $cache | Out-Null
+          $env:ELECTRON_BUILDER_CACHE = Join-Path $env:USERPROFILE "eb-cache"
+          New-Item -ItemType Directory -Force -Path $env:ELECTRON_BUILDER_CACHE | Out-Null
 
-          # Mirror sources into a clean folder (no node_modules / dist). `tar` is unreliable on Windows runners.
-          robocopy . $vp /E /XD node_modules dist /NFL /NDL /NJH /NJS /NP | Out-Host
-          $rc = $LASTEXITCODE
-          if ($rc -ge 8) { throw "robocopy failed: exit code $rc" }
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
 
-          Push-Location $vp
-          try {
-            npm install --no-audit --no-fund
-            if ($LASTEXITCODE -ne 0) { throw "npm install failed: exit code $LASTEXITCODE" }
-            # Use cmd so exit codes are reliable when output is redirected (PowerShell `*>` can mask npm failures).
-            cmd /c "npm run dist > build.log 2>&1"
-            $distCode = $LASTEXITCODE
-            if ($distCode -ne 0) {
-              $logPath = Join-Path (Get-Location) "build.log"
-              $repoLog = Join-Path $env:GITHUB_WORKSPACE "video-player/build.log"
-              if (Test-Path $logPath) {
-                Copy-Item -Force $logPath $repoLog
-                Write-Host "---- $logPath (tail 250 lines) ----"
-                Get-Content $logPath -Tail 250 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
-              } else {
-                Write-Host "build.log missing at $logPath"
-              }
-              throw "npm run dist failed: exit code $distCode"
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw "npm install failed: exit code $LASTEXITCODE" }
+
+          cmd /c "npm run dist > build.log 2>&1"
+          $distCode = $LASTEXITCODE
+          if ($distCode -ne 0) {
+            Write-Host "---- build.log (tail 250 lines) ----"
+            if (Test-Path build.log) {
+              Get-Content build.log -Tail 250 | ForEach-Object { Write-Host $_ }
             }
-          } finally {
-            Pop-Location
+            throw "npm run dist failed: exit code $distCode"
           }
 
-          $outDist = Join-Path $env:GITHUB_WORKSPACE "video-player/dist"
-          New-Item -ItemType Directory -Force -Path $outDist | Out-Null
+          $unpacked = Join-Path (Get-Location) "dist/win-unpacked"
+          if (-not (Test-Path $unpacked)) {
+            Write-Host "dist/ contents:"
+            if (Test-Path dist) { Get-ChildItem -Recurse dist }
+            throw "electron-builder did not produce dist/win-unpacked"
+          }
 
-          $distDir = Join-Path $vp "dist"
-          $exes = @()
-          if (Test-Path $distDir) {
-            $exes = @(Get-ChildItem -Path $distDir -Recurse -Filter *.exe -ErrorAction SilentlyContinue)
-          }
-          if ($exes.Count -lt 1) {
-            Write-Host "No *.exe under $distDir; contents:"
-            if (Test-Path $distDir) { Get-ChildItem -Recurse $distDir }
-            throw "electron-builder did not produce any dist/**/*.exe"
-          }
-          Copy-Item -Force $exes.FullName $outDist
-
-          $bl = Join-Path $vp "build.log"
-          if (Test-Path $bl) {
-            Copy-Item -Force $bl (Join-Path $env:GITHUB_WORKSPACE "video-player/build.log")
-          }
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $zipName = "$($pkg.name)-$($pkg.version)-Windows-x64.zip"
+          $zipPath = Join-Path (Get-Location) "dist/$zipName"
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          # Archive the whole tree (Compress-Archive -Path "dir\*" is not recursive into subfolders).
+          Compress-Archive -Path $unpacked -DestinationPath $zipPath -CompressionLevel Optimal
+          if (-not (Test-Path $zipPath)) { throw "failed to create $zipPath" }
+          Write-Host "Created $zipPath ($((Get-Item $zipPath).Length) bytes)"
 
       - name: Show build output on failure
         if: failure()
         shell: pwsh
         run: |
-          $candidates = @(
-            (Join-Path $env:GITHUB_WORKSPACE "video-player/build.log"),
-            (Join-Path $env:USERPROFILE "vpb/build.log")
-          )
-          $log = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if ($log) {
-            $snippet = (Get-Content $log -TotalCount 200 -ErrorAction SilentlyContinue | Out-String)
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## electron-builder log (first 200 lines): $log"
+          $log = Join-Path $env:GITHUB_WORKSPACE "video-player/build.log"
+          if (Test-Path $log) {
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## electron-builder log (first 200 lines)"
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```text'
-            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $snippet
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value (Get-Content $log -TotalCount 200 -ErrorAction SilentlyContinue | Out-String)
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
-            Write-Host "---- $log ----"
-            Get-Content $log -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+            Get-Content $log | ForEach-Object { Write-Host $_ }
           } else {
-            Write-Host "No build.log found. Checked: $($candidates -join ', ')"
+            Write-Host "No video-player/build.log (dist may have failed before log write)"
           }
           if (Test-Path dist) { Get-ChildItem -Recurse dist } else { Write-Host "dist/ missing" }
 
@@ -125,7 +96,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: video-player/dist/*.exe
+          files: video-player/dist/*.zip
           fail_on_unmatched_files: false
           generate_release_notes: true
         env:
@@ -135,5 +106,5 @@ jobs:
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: custom-video-player-windows-exe
-          path: video-player/dist/*.exe
+          name: custom-video-player-windows-zip
+          path: video-player/dist/*.zip

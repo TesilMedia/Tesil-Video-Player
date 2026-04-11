@@ -1,6 +1,6 @@
 {
   "name": "custom-video-player",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": true,
   "description": "Custom video player for Windows (desktop)",
   "author": "becknerd",
@@ -12,7 +12,8 @@
   "main": "electron-main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable",
+    "dist": "electron-builder --win dir",
+    "dist:portable": "electron-builder --win portable",
     "dist:nsis": "electron-builder --win nsis"
   },
   "devDependencies": {
@@ -31,10 +32,9 @@
     },
     "win": {
       "signAndEditExecutable": false,
-      "artifactName": "${name}-${version}-Windows-x64-Portable.${ext}",
       "target": [
         {
-          "target": "portable",
+          "target": "dir",
           "arch": ["x64"]
         }
       ]
