@@ -91,6 +91,98 @@
     touchViewportChromeDeferUntil = 0;
   }
 
+  /** Touch-primary UIs; some Windows stacks report a finger as `pointerType: "mouse"`. */
+  function isTouchPrimaryUi() {
+    try {
+      return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** True for real touch pointers or coarse touch-primary environments (covers mis-typed pointers). */
+  function isTouchDerivedUiEvent(e) {
+    if (!e.isTrusted) return false;
+    if (e instanceof PointerEvent) {
+      if (e.pointerType === "touch") return true;
+      return isTouchPrimaryUi();
+    }
+    try {
+      const cap = /** @type {{ firesTouchEvents?: boolean }} */ (e).sourceCapabilities;
+      return !!cap?.firesTouchEvents;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Top hit-test node must be the control or inside it (not a sibling overlay / video).
+   * Lets keyboard / mouse paths through when `clientX`/`clientY` are unusable.
+   */
+  function isDirectTopHitOnPlayerControl(control, clientX, clientY) {
+    if (!(control instanceof Element) || !player.contains(control)) return false;
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return true;
+    let stack;
+    try {
+      stack = document.elementsFromPoint(clientX, clientY);
+    } catch (_) {
+      return true;
+    }
+    if (!stack?.length) return false;
+    const top = stack[0];
+    if (!(top instanceof Element)) return false;
+    if (videoViewport.contains(top)) return false;
+    if (top === control) return true;
+    return control.contains(top);
+  }
+
+  function eventTargetPlayerHudControl(e) {
+    if (!(e.target instanceof Element)) return null;
+    const hit = e.target.closest("button, input, select, textarea");
+    if (!hit || !player.contains(hit) || videoViewport.contains(hit)) return null;
+    if (!hit.closest(".player__hud")) return null;
+    return hit;
+  }
+
+  /**
+   * After chrome auto-hides, the first touch on a HUD control (tap or long-press) only wakes UI;
+   * `pointerup` then enables controls. `setTimeout(0)` runs after the synthetic `click` pass.
+   */
+  let touchHudControlsAllowActions = false;
+
+  function scheduleTouchHudControlsPrimed() {
+    window.setTimeout(() => {
+      touchHudControlsAllowActions = true;
+    }, 0);
+  }
+
+  function onPlayerTouchPointerEndedForPrime(e) {
+    if (!(e instanceof PointerEvent)) return;
+    if (!isTouchDerivedUiEvent(e)) return;
+    if (pinchState || (viewportPointers.size >= 2 && isTwoFingerTouchPinch())) return;
+    if (!(e.target instanceof Node) || !player.contains(e.target)) return;
+    scheduleTouchHudControlsPrimed();
+  }
+
+  function applyTouchChromeInputGuards(e) {
+    const control = eventTargetPlayerHudControl(e);
+    if (!control) return;
+    const direct = isDirectTopHitOnPlayerControl(control, e.clientX, e.clientY);
+    if (!direct) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (!isTouchDerivedUiEvent(e)) return;
+    if (!touchHudControlsAllowActions) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      clearTouchViewportChromeDefer();
+      exitChromeIdle();
+      armChromeIdleTimer();
+    }
+  }
+
   function isTwoFingerTouchPinch() {
     if (viewportPointers.size !== 2) return false;
     const pts = [...viewportPointers.values()];
@@ -1086,6 +1178,7 @@
       }
       requestAnimationFrame(() => {
         player.classList.add("player--idle");
+        touchHudControlsAllowActions = false;
       });
     }, IDLE_UI_MS);
   }
@@ -1096,6 +1189,11 @@
     if (performance.now() < touchViewportChromeDeferUntil) return;
     armChromeIdleTimer();
   }
+
+  player.addEventListener("pointerdown", applyTouchChromeInputGuards, true);
+  player.addEventListener("click", applyTouchChromeInputGuards, true);
+  player.addEventListener("pointerup", onPlayerTouchPointerEndedForPrime, false);
+  player.addEventListener("pointercancel", onPlayerTouchPointerEndedForPrime, false);
 
   player.addEventListener("pointermove", bumpChromeActivity);
   player.addEventListener("pointerenter", (e) => {
