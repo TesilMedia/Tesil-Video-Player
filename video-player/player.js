@@ -58,11 +58,105 @@
   const MIN_ZOOM = 1;
   const MAX_ZOOM = 4;
   const ZOOM_STEP = 0.25;
+  /** Movement past this (1× zoom) cancels tap-to-play so page scroll can start on the player. */
+  const VIEWPORT_TAP_CANCEL_MOVE_PX = 12;
+  /** Two-finger span must reach this (px) before pinch-zoom activates (avoids jitter when touches start close). */
+  const PINCH_MIN_START_DIST_PX = 28;
+  /** Clamp per-move scale ratio so a bad frame does not explode zoom. */
+  const PINCH_FACTOR_MIN = 0.55;
+  const PINCH_FACTOR_MAX = 1.85;
+  /**
+   * After a touch enters the video viewport, suppress HUD chrome briefly so the second
+   * finger of a pinch can land without `pointerenter` / `pointerdown` flashing the UI first.
+   */
+  const TOUCH_VIEWPORT_CHROME_DEFER_MS = 240;
 
   let zoomLevel = 1;
   let panX = 0;
   let panY = 0;
   let panPointer = null;
+
+  /** @type {Map<number, { clientX: number; clientY: number; pointerType: string }>} */
+  const viewportPointers = new Map();
+  /** @type {{ lastDist: number } | null} */
+  let pinchState = null;
+  /** `performance.now()` until which chrome bumps are skipped for a leading viewport touch. */
+  let touchViewportChromeDeferUntil = 0;
+
+  function armTouchViewportChromeDefer() {
+    touchViewportChromeDeferUntil = performance.now() + TOUCH_VIEWPORT_CHROME_DEFER_MS;
+  }
+
+  function clearTouchViewportChromeDefer() {
+    touchViewportChromeDeferUntil = 0;
+  }
+
+  function isTwoFingerTouchPinch() {
+    if (viewportPointers.size !== 2) return false;
+    const pts = [...viewportPointers.values()];
+    return pts[0].pointerType === "touch" && pts[1].pointerType === "touch";
+  }
+
+  function getViewportPinchDistance() {
+    const pts = [...viewportPointers.values()];
+    if (pts.length !== 2) return 0;
+    const dx = pts[0].clientX - pts[1].clientX;
+    const dy = pts[0].clientY - pts[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  function getViewportPinchAnchor() {
+    const pts = [...viewportPointers.values()];
+    if (pts.length !== 2) return null;
+    const mx = (pts[0].clientX + pts[1].clientX) / 2;
+    const my = (pts[0].clientY + pts[1].clientY) / 2;
+    const rect = videoViewport.getBoundingClientRect();
+    return {
+      x: Math.min(rect.width, Math.max(0, mx - rect.left)),
+      y: Math.min(rect.height, Math.max(0, my - rect.top)),
+    };
+  }
+
+  function releasePanPointerCapture() {
+    if (!panPointer) return;
+    const pid = panPointer.id;
+    try {
+      if (videoViewport.hasPointerCapture(pid)) {
+        videoViewport.releasePointerCapture(pid);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    panPointer = null;
+    videoViewport.dataset.panning = "false";
+  }
+
+  function promoteRemainingFingerToPan() {
+    if (viewportPointers.size !== 1) {
+      panPointer = null;
+      return;
+    }
+    const [id, pt] = viewportPointers.entries().next().value;
+    if (zoomLevel > 1.001) {
+      panPointer = {
+        id,
+        cx: pt.clientX,
+        cy: pt.clientY,
+        ox: panX,
+        oy: panY,
+        dragged: false,
+        tapCancelled: true,
+      };
+      try {
+        videoViewport.setPointerCapture(id);
+      } catch (_) {
+        /* ignore */
+      }
+      videoViewport.dataset.panning = "true";
+    } else {
+      panPointer = null;
+    }
+  }
 
   function clampPan() {
     if (zoomLevel <= 1) {
@@ -810,8 +904,59 @@
   videoViewport.addEventListener("dragstart", blockNativeVideoDrag);
   zoomLayer.addEventListener("dragstart", blockNativeVideoDrag);
 
+  function syncPinchChromeSuppression() {
+    const suppress =
+      viewportPointers.size >= 2 && isTwoFingerTouchPinch();
+    player.classList.toggle("player--pinch-zoom", suppress);
+    if (suppress) {
+      clearTouchViewportChromeDefer();
+      hideScrubPreview();
+    }
+  }
+
+  function beginPinchFromCurrentDistance() {
+    if (pinchState) return true;
+    const d = getViewportPinchDistance();
+    if (d < PINCH_MIN_START_DIST_PX) return false;
+    pinchState = { lastDist: d };
+    videoViewport.classList.add("player__viewport--pinch");
+    releasePanPointerCapture();
+    return true;
+  }
+
+  function applyPinchZoomMove(e) {
+    if (!pinchState) return;
+    const d = getViewportPinchDistance();
+    const anchor = getViewportPinchAnchor();
+    if (!anchor || pinchState.lastDist <= 0) return;
+    let factor = d / pinchState.lastDist;
+    factor = Math.max(PINCH_FACTOR_MIN, Math.min(PINCH_FACTOR_MAX, factor));
+    setZoomLevel(zoomLevel * factor, anchor);
+    pinchState.lastDist = d;
+    e.preventDefault();
+  }
+
   videoViewport.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
+    viewportPointers.set(e.pointerId, {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      pointerType: e.pointerType,
+    });
+
+    if (viewportPointers.size === 2 && isTwoFingerTouchPinch()) {
+      clearTouchViewportChromeDefer();
+      if (panPointer) panPointer.tapCancelled = true;
+      if (beginPinchFromCurrentDistance()) e.preventDefault();
+      syncPinchChromeSuppression();
+      return;
+    }
+
+    if (viewportPointers.size === 2) {
+      syncPinchChromeSuppression();
+      return;
+    }
+
     player.focus({ preventScroll: true });
     if (zoomLevel > 1.001) {
       e.preventDefault();
@@ -823,6 +968,7 @@
       ox: panX,
       oy: panY,
       dragged: false,
+      tapCancelled: false,
     };
     if (zoomLevel > 1.001) {
       try {
@@ -832,13 +978,39 @@
       }
       videoViewport.dataset.panning = "true";
     }
+    if (e.pointerType === "touch") armTouchViewportChromeDefer();
+    else clearTouchViewportChromeDefer();
+    syncPinchChromeSuppression();
   });
 
   videoViewport.addEventListener("pointermove", (e) => {
+    const tracked = viewportPointers.get(e.pointerId);
+    if (tracked) {
+      tracked.clientX = e.clientX;
+      tracked.clientY = e.clientY;
+      tracked.pointerType = e.pointerType;
+    }
+
+    if (viewportPointers.size === 2 && isTwoFingerTouchPinch()) {
+      if (!pinchState) beginPinchFromCurrentDistance();
+      if (pinchState) {
+        applyPinchZoomMove(e);
+        return;
+      }
+    }
+
     if (!panPointer || e.pointerId !== panPointer.id) return;
-    if (zoomLevel <= 1.001) return;
     const dx = e.clientX - panPointer.cx;
     const dy = e.clientY - panPointer.cy;
+    if (
+      zoomLevel <= 1.001 &&
+      !panPointer.tapCancelled &&
+      (Math.abs(dx) > VIEWPORT_TAP_CANCEL_MOVE_PX ||
+        Math.abs(dy) > VIEWPORT_TAP_CANCEL_MOVE_PX)
+    ) {
+      panPointer.tapCancelled = true;
+    }
+    if (zoomLevel <= 1.001) return;
     if (!panPointer.dragged && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
       panPointer.dragged = true;
     }
@@ -851,8 +1023,24 @@
   });
 
   function endViewportPointer(e) {
+    viewportPointers.delete(e.pointerId);
+    if (viewportPointers.size === 0) {
+      clearTouchViewportChromeDefer();
+      requestAnimationFrame(() => bumpChromeActivity());
+    }
+    syncPinchChromeSuppression();
+
+    if (pinchState && viewportPointers.size < 2) {
+      pinchState = null;
+      videoViewport.classList.remove("player__viewport--pinch");
+      promoteRemainingFingerToPan();
+      syncPinchChromeSuppression();
+      return;
+    }
+
     if (!panPointer || e.pointerId !== panPointer.id) return;
     const dragged = panPointer.dragged;
+    const tapCancelled = panPointer.tapCancelled;
     panPointer = null;
     try {
       if (videoViewport.hasPointerCapture(e.pointerId)) {
@@ -862,7 +1050,7 @@
       /* ignore */
     }
     videoViewport.dataset.panning = "false";
-    if (!dragged && zoomLevel <= 1.001) togglePlay();
+    if (!dragged && zoomLevel <= 1.001 && !tapCancelled) togglePlay();
   }
 
   videoViewport.addEventListener("pointerup", endViewportPointer);
@@ -903,15 +1091,27 @@
   }
 
   function bumpChromeActivity() {
+    if (pinchState) return;
+    if (viewportPointers.size >= 2 && isTwoFingerTouchPinch()) return;
+    if (performance.now() < touchViewportChromeDeferUntil) return;
     armChromeIdleTimer();
   }
 
-  player.addEventListener("mousemove", bumpChromeActivity);
-  player.addEventListener("mouseenter", () => {
+  player.addEventListener("pointermove", bumpChromeActivity);
+  player.addEventListener("pointerenter", (e) => {
     player.classList.remove("player--pointer-outside");
+    if (
+      e.pointerType === "touch" &&
+      e.target instanceof Node &&
+      videoViewport.contains(e.target)
+    ) {
+      armTouchViewportChromeDefer();
+      return;
+    }
     bumpChromeActivity();
   });
-  player.addEventListener("pointerdown", bumpChromeActivity, true);
+  /* Bubble so videoViewport pointerdown runs first and viewportPointers reflects two-finger pinch. */
+  player.addEventListener("pointerdown", bumpChromeActivity);
   player.addEventListener("keydown", bumpChromeActivity, true);
   player.addEventListener("wheel", bumpChromeActivity, { passive: true });
   player.addEventListener("focusin", (e) => {
@@ -924,7 +1124,9 @@
     armChromeIdleTimer();
   });
 
-  player.addEventListener("mouseleave", () => {
+  /** Touch/stylus leave the window as “mouse” moves; only treat real mouse/pen leave as “outside”. */
+  player.addEventListener("pointerleave", (e) => {
+    if (e.pointerType === "touch") return;
     clearChromeIdleTimer();
     exitChromeIdle();
     player.classList.add("player--pointer-outside");
@@ -958,6 +1160,16 @@
   }).observe(videoViewport);
 
   document.addEventListener("pointermove", (e) => {
+    if (
+      pinchState ||
+      (viewportPointers.size >= 2 && isTwoFingerTouchPinch())
+    ) {
+      return;
+    }
+    if (performance.now() < touchViewportChromeDeferUntil) {
+      if (scrubPreviewActive) hideScrubPreview();
+      return;
+    }
     const pr = player.getBoundingClientRect();
     if (
       e.clientX < pr.left ||

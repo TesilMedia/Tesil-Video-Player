@@ -211,6 +211,8 @@ body::-webkit-scrollbar {
   z-index: 0;
   user-select: none;
   -webkit-user-select: none;
+  /* Tap-to-play and sliders work reliably; avoids double-tap zoom on the page when not panning. */
+  touch-action: manipulation;
 }
 
 .player__viewport[data-can-pan="true"] {
@@ -220,6 +222,11 @@ body::-webkit-scrollbar {
 
 .player__viewport[data-panning="true"] {
   cursor: grabbing;
+}
+
+/* Two-finger pinch zoom: take over touch so the page does not steal the gesture. */
+.player__viewport.player__viewport--pinch {
+  touch-action: none;
 }
 
 .player__zoom-layer {
@@ -277,6 +284,19 @@ body::-webkit-scrollbar {
 .player .player__hud:focus-within,
 .player:not(.player--idle):focus-within .player__hud {
   opacity: 1;
+}
+
+/* Touch / pen-primary devices: no :hover; keep chrome visible whenever not in idle auto-hide. */
+@media (hover: none) {
+  .player:not(.player--idle) .player__hud {
+    opacity: 1;
+  }
+}
+
+/* Two-finger pinch on the video: keep HUD + scrub preview from appearing mid-gesture. */
+.player.player--pinch-zoom .player__hud {
+  opacity: 0 !important;
+  pointer-events: none;
 }
 
 .player__corner-tools {
