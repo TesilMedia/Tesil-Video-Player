@@ -1,0 +1,709 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0f1114;
+  --surface: #1a1d23;
+  --text: #e8eaed;
+  --muted: #9aa0a6;
+  --accent: #8ab4f8;
+  --accent-dim: #5f8de0;
+  --radius: 10px;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --chrome-control-bg: #2a2e36;
+  --chrome-control-bg-hover: #383d47;
+  --chrome-control-border: rgba(255, 255, 255, 0.14);
+  --chrome-track: #454a56;
+  --chrome-control-height: 2.25rem;
+  /* Unified size for labels, time, speed dropdown, and bar buttons */
+  --chrome-font-size: 0.8125rem;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.hint {
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.hint code {
+  font-size: 0.8125rem;
+  background: var(--surface);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.upload-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.upload-row__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.upload-row__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.upload-row__btn:hover {
+  background: var(--accent-dim);
+}
+
+.upload-row__btn:focus-visible {
+  box-shadow: var(--focus);
+}
+
+.upload-row__name {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.player {
+  position: relative;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+
+.player:focus-within {
+  outline: none;
+}
+
+.player__viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.player__viewport[data-can-pan="true"] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.player__viewport[data-panning="true"] {
+  cursor: grabbing;
+}
+
+.player__zoom-layer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.player__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  vertical-align: middle;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/*
+ * Paused frames show subsampling + compression more than motion. We cannot sharpen real
+ * detail from the bitstream; a light contrast/sat boost only improves *perceived* clarity.
+ * Reduce or remove these values if it looks too punchy on your sources.
+ */
+.player[data-state="paused"] .player__video {
+  filter: contrast(1.05) saturate(1.08);
+}
+
+.player__preview-src {
+  position: absolute;
+  width: 160px;
+  height: 90px;
+  opacity: 0;
+  pointer-events: none;
+  left: -9999px;
+  top: 0;
+  z-index: 1;
+}
+
+.player__chrome {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 0.5rem 0.45rem;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  /* Do not set overflow-x on this ancestor: it clips the scrub preview (above the seek bar). */
+  overflow: visible;
+}
+
+.player:hover .player__chrome,
+.player[data-scrubbing="true"] .player__chrome,
+.player .player__chrome:focus-within,
+.player:not(.player--idle):focus-within .player__chrome {
+  opacity: 1;
+}
+
+/*
+ * Idle hides chrome even while :hover on the frame (Netflix-style). Does not apply when a
+ * control inside .player__chrome still has focus — JS blurs those on idle; :has() is a fallback.
+ */
+.player.player--idle:not(:has(.player__chrome:focus-within)):not([data-scrubbing="true"])
+  .player__chrome {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.player.player--idle:not(:has(.player__chrome:focus-within)):not([data-scrubbing="true"]) {
+  cursor: none;
+}
+
+.player.player--idle:not(:has(.player__chrome:focus-within)):not([data-scrubbing="true"])
+  .player__viewport {
+  cursor: none !important;
+}
+
+/* Hide chrome immediately when the pointer leaves the player (e.g. after click-to-focus). */
+.player.player--pointer-outside:not(:has(.player__chrome:focus-within)):not(
+    [data-scrubbing="true"]
+  )
+  .player__chrome {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.player__progress-wrap {
+  position: relative;
+  margin-bottom: 0.35rem;
+  display: flex;
+  align-items: center;
+  min-height: var(--chrome-control-height);
+}
+
+.player__scrub-preview {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.65));
+}
+
+/* `display: flex` above wins over the default [hidden] rule; force hide when toggled in JS */
+.player__scrub-preview[hidden] {
+  display: none !important;
+}
+
+.player__scrub-preview-canvas {
+  display: block;
+  width: 160px;
+  height: 90px;
+  border-radius: 6px;
+  background: #111;
+}
+
+.player__scrub-preview-time {
+  font-size: var(--chrome-font-size);
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.player__progress {
+  --range-thumb: 14px;
+  --range-track-h: 10px;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: var(--range-thumb);
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.player__progress::-webkit-slider-runnable-track {
+  height: var(--range-track-h);
+  background: var(--chrome-track);
+  border-radius: calc(var(--range-track-h) / 2);
+}
+
+.player__progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--range-thumb);
+  height: var(--range-thumb);
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: calc((var(--range-track-h) - var(--range-thumb)) / 2);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
+.player__progress::-moz-range-thumb {
+  width: var(--range-thumb);
+  height: var(--range-thumb);
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
+.player__progress::-moz-range-track {
+  height: var(--range-track-h);
+  background: var(--chrome-track);
+  border-radius: calc(var(--range-track-h) / 2);
+}
+
+.player__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-wrap: nowrap;
+  min-height: var(--chrome-control-height);
+  min-width: min-content;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+}
+
+.player__zoom-group {
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.05rem;
+  box-sizing: border-box;
+  width: max-content;
+  flex-shrink: 0;
+  height: var(--chrome-control-height);
+  padding: 0;
+  background: var(--chrome-control-bg);
+  border: 1px solid var(--chrome-control-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.player__zoom-group .player__btn {
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
+  padding: 0 0.18rem;
+  background: transparent;
+  border: none;
+}
+
+.player__zoom-group .player__btn:hover {
+  background: var(--chrome-control-bg-hover);
+}
+
+.player__btn--zoom-reset {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 0.35rem;
+  font-size: var(--chrome-font-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.player__btn--square {
+  width: var(--chrome-control-height);
+  min-width: var(--chrome-control-height);
+  padding: 0;
+  flex-shrink: 0;
+  aspect-ratio: 1;
+}
+
+.player__btn--pip {
+  font-size: var(--chrome-font-size);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.player__btn {
+  box-sizing: border-box;
+  height: var(--chrome-control-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--chrome-control-border);
+  background: var(--chrome-control-bg);
+  color: #fff;
+  padding: 0 0.55rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--chrome-font-size);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.player__btn:hover {
+  background: var(--chrome-control-bg-hover);
+}
+
+.player__btn:focus-visible {
+  box-shadow: var(--focus);
+}
+
+.icon-play {
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 8px 0 8px 12px;
+  border-color: transparent transparent transparent #fff;
+}
+
+.player[data-state="playing"] .icon-play {
+  width: 10px;
+  height: 14px;
+  border: none;
+  background: linear-gradient(
+    90deg,
+    #fff 0%,
+    #fff 35%,
+    transparent 35%,
+    transparent 65%,
+    #fff 65%,
+    #fff 100%
+  );
+}
+
+.icon-volume {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.icon-volume__svg {
+  display: block;
+}
+
+.icon-volume__svg--off {
+  display: none;
+}
+
+.player[data-muted="true"] .icon-volume__svg--on {
+  display: none;
+}
+
+.player[data-muted="true"] .icon-volume__svg--off {
+  display: block;
+}
+
+.player__time-group {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  width: max-content;
+  flex-shrink: 0;
+  height: var(--chrome-control-height);
+  padding: 0;
+  background: var(--chrome-control-bg);
+  border: 1px solid var(--chrome-control-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.player__time-group .player__time {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.35rem;
+  text-align: center;
+  font-size: var(--chrome-font-size);
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+}
+
+.player__btn--frame {
+  flex-shrink: 0;
+  width: 1.35rem;
+  min-width: 1.35rem;
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.player__btn--frame:hover {
+  background: var(--chrome-control-bg-hover);
+}
+
+.player__btn--frame:focus-visible {
+  box-shadow: var(--focus);
+}
+
+.icon-frame-arrow {
+  display: block;
+}
+
+.player__rate {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.05rem;
+  width: max-content;
+  flex-shrink: 0;
+  height: var(--chrome-control-height);
+  padding: 0;
+  background: var(--chrome-control-bg);
+  border: 1px solid var(--chrome-control-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.player__rate .player__btn {
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
+  padding: 0 0.18rem;
+  background: transparent;
+  border: none;
+}
+
+.player__rate .player__btn:hover {
+  background: var(--chrome-control-bg-hover);
+}
+
+.player__rate-select-wrap {
+  position: relative;
+  flex: 0 1 auto;
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  min-width: 3.25rem;
+}
+
+.player__rate-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  font-size: var(--chrome-font-size);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  border-radius: 6px;
+  padding: 0 0.35rem;
+  cursor: pointer;
+  text-align: center;
+  text-align-last: center;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.player__rate-select::-ms-expand {
+  display: none;
+}
+
+.player__rate-select:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.player__rate-select option {
+  background: var(--chrome-control-bg);
+  color: #fff;
+}
+
+.player__volume {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.12rem;
+  width: max-content;
+  flex-shrink: 0;
+  height: var(--chrome-control-height);
+  padding: 0;
+  background: var(--chrome-control-bg);
+  border: 1px solid var(--chrome-control-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.player__volume .player__btn {
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
+  padding: 0 0.12rem;
+  background: transparent;
+  border: none;
+}
+
+.player__volume .player__btn:hover {
+  background: var(--chrome-control-bg-hover);
+}
+
+.player__volume-slider {
+  --vol-thumb: 12px;
+  --vol-track-h: 4px;
+  align-self: center;
+  flex: 1 1 auto;
+  min-width: 56px;
+  width: 0;
+  max-width: 14rem;
+  height: var(--vol-thumb);
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.player__volume-slider::-webkit-slider-runnable-track {
+  height: var(--vol-track-h);
+  background: var(--chrome-track);
+  border-radius: calc(var(--vol-track-h) / 2);
+}
+
+.player__volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--vol-thumb);
+  height: var(--vol-thumb);
+  border-radius: 50%;
+  background: #fff;
+  margin-top: calc((var(--vol-track-h) - var(--vol-thumb)) / 2);
+}
+
+.player__volume-slider::-moz-range-thumb {
+  width: var(--vol-thumb);
+  height: var(--vol-thumb);
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.player__volume-slider::-moz-range-track {
+  height: var(--vol-track-h);
+  background: var(--chrome-track);
+  border-radius: calc(var(--vol-track-h) / 2);
+}
+
+.player__spacer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.icon-fs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-fs__svg {
+  display: block;
+}
+
+.tooltip-layer {
+  position: fixed;
+  z-index: 100000;
+  left: 0;
+  top: 0;
+  margin: 0;
+  max-width: min(18rem, calc(100vw - 16px));
+  padding: 0.35rem 0.5rem;
+  font-size: var(--chrome-font-size);
+  font-weight: 500;
+  line-height: 1.35;
+  color: #fff;
+  background: rgba(26, 29, 35, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  white-space: normal;
+}
+
+.tooltip-layer[hidden] {
+  display: none !important;
+}
