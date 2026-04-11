@@ -1,6 +1,6 @@
 {
   "name": "custom-video-player",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "description": "Custom video player for Windows (desktop)",
   "author": "becknerd",
@@ -23,6 +23,8 @@
     "appId": "com.custom.videoplayer",
     "productName": "CustomVideoPlayer",
     "copyright": "Copyright © 2026",
+    "npmRebuild": false,
+    "publish": "never",
     "directories": {
       "output": "dist"
     },

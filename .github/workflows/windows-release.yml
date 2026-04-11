@@ -31,13 +31,30 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Windows installer
+      - name: Build Windows installer (isolated copy)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        shell: pwsh
+          VPBUILD: ${{ runner.temp }}/vpbuild
+        shell: bash
         run: |
-          cmd /c "npm run dist > build.log 2>&1"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          set -euo pipefail
+          rm -rf "$VPBUILD"
+          mkdir -p "$VPBUILD"
+          tar -cf - --exclude=node_modules --exclude=dist . | tar -xf - -C "$VPBUILD"
+          cd "$VPBUILD"
+          npm install
+          npm ls --depth=0
+          npm run dist 2>&1 | tee build.log
+          mkdir -p "$GITHUB_WORKSPACE/video-player/dist"
+          shopt -s nullglob
+          exes=(dist/*.exe)
+          if [ "${#exes[@]}" -eq 0 ]; then
+            echo "No dist/*.exe produced; dist contents:"
+            ls -la dist || true
+            exit 1
+          fi
+          cp -f "${exes[@]}" "$GITHUB_WORKSPACE/video-player/dist/"
+          cp -f build.log "$GITHUB_WORKSPACE/video-player/build.log"
 
       - name: Show build output on failure
         if: failure()
