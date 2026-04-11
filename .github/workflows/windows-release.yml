@@ -1,4 +1,4 @@
-# One portable .exe (self-extracting). Build under C:\vp + electron-builder 26 to avoid old NSIS path bugs.
+# electron-builder --win dir (no NSIS), then 7-Zip SFX → one .exe users download and run.
 
 name: Windows release
 
@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Build portable .exe
+      - name: Build unpacked app + self-extracting .exe
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           ELECTRON_BUILDER_CACHE: C:\eb
@@ -48,16 +48,62 @@ jobs:
             throw "electron-builder failed: exit code $LASTEXITCODE"
           }
 
-          $distSrc = Join-Path $b "dist"
-          $exes = @(Get-ChildItem $distSrc -Filter *.exe -File -ErrorAction SilentlyContinue)
-          if ($exes.Count -lt 1) {
-            Get-ChildItem $distSrc -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-            throw "No portable .exe found in dist/"
+          $distRoot = Join-Path $b "dist"
+          $unpacked = Join-Path $distRoot "win-unpacked"
+          if (-not (Test-Path $unpacked)) {
+            $pick = Get-ChildItem $distRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
+              (Get-ChildItem $_.FullName -Filter *.exe -File -ErrorAction SilentlyContinue).Count -gt 0
+            } | Select-Object -First 1
+            if ($pick) { $unpacked = $pick.FullName }
           }
+          if (-not (Test-Path $unpacked)) {
+            Get-ChildItem $distRoot | ForEach-Object { Write-Host $_.Name }
+            throw "No win-unpacked output under dist/"
+          }
+
+          $7z = "C:\Program Files\7-Zip\7z.exe"
+          if (-not (Test-Path $7z)) { $7z = "C:\Program Files (x86)\7-Zip\7z.exe" }
+          if (-not (Test-Path $7z)) { throw "7-Zip not found on runner" }
+
+          $sevenDir = Split-Path $7z
+          $sfx = Join-Path $sevenDir "7zSD.sfx"
+          if (-not (Test-Path $sfx)) { $sfx = Join-Path $sevenDir "7z.sfx" }
+          if (-not (Test-Path $sfx)) { throw "7-Zip SFX module not found next to 7z.exe" }
+
+          $stg = Join-Path $env:RUNNER_TEMP "sfxpack"
+          if (Test-Path $stg) { Remove-Item $stg -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $stg | Out-Null
+          $pack7z = Join-Path $stg "app.7z"
+
+          Push-Location $unpacked
+          & $7z a -t7z -mx5 -r $pack7z *
+          $z7 = $LASTEXITCODE
+          Pop-Location
+          if ($z7 -ne 0) { throw "7z archive failed: exit code $z7" }
+
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $outName = "$($pkg.build.productName)-$($pkg.version)-Windows.exe"
+          $outExe = Join-Path $distRoot $outName
+          if (Test-Path $outExe) { Remove-Item $outExe -Force }
+
+          $cfg = Join-Path $stg "sfx-config.txt"
+          $cfgLines = @(
+            ';!@Install@!UTF-8!'
+            'Title="CustomVideoPlayer"'
+            'BeginPrompt="This will extract CustomVideoPlayer and start it."'
+            'GUIMode="2"'
+            'RunProgram="CustomVideoPlayer.exe"'
+          )
+          [IO.File]::WriteAllLines($cfg, $cfgLines, [Text.UTF8Encoding]::new($false))
+
+          cmd.exe /c ('copy /b "{0}"+"{1}"+"{2}" "{3}"' -f $sfx, $cfg, $pack7z, $outExe)
+          if ($LASTEXITCODE -ne 0) { throw "copy /b SFX merge failed: exit code $LASTEXITCODE" }
+          if (-not (Test-Path $outExe)) { throw "SFX output missing: $outExe" }
+          Write-Host "Built $outExe size=$((Get-Item $outExe).Length)"
 
           $distDest = Join-Path $src "dist"
           New-Item -ItemType Directory -Force -Path $distDest | Out-Null
-          Copy-Item (Join-Path $distSrc "*.exe") $distDest -Force
+          Copy-Item $outExe $distDest -Force
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
