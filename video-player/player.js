@@ -202,9 +202,16 @@
   /** While true, `stepByFrame` for that direction chains after each completed seek (comma/period hold). */
   let frameKeyHeldBack = false;
   let frameKeyHeldForward = false;
+  /** Same for overlay frame step buttons (pointer hold). */
+  let framePointerHeldBack = false;
+  let framePointerHeldForward = false;
+  /** True after `pointerdown` on a frame step button until `click` skips or rAF clears (no duplicate step). */
+  let lastFrameStepViaPointer = false;
 
-  function frameKeyHeldForDirection(direction) {
-    return direction < 0 ? frameKeyHeldBack : frameKeyHeldForward;
+  function frameHeldForDirection(direction) {
+    return direction < 0
+      ? frameKeyHeldBack || framePointerHeldBack
+      : frameKeyHeldForward || framePointerHeldForward;
   }
 
   /** Suppresses stale `seeked` UI when a newer frame-step seek was started. */
@@ -237,11 +244,11 @@
         if (myGen !== frameStepGen) return;
         syncProgressFromVideo();
         updateTimeDisplay();
-        if (!frameKeyHeldForDirection(direction)) return;
+        if (!frameHeldForDirection(direction)) return;
         // Paused video: `requestVideoFrameCallback` often never fires, so holds would stop after
         // one frame. `requestAnimationFrame` runs after the seeked paint path on the main thread.
         requestAnimationFrame(() => {
-          if (!frameKeyHeldForDirection(direction)) return;
+          if (!frameHeldForDirection(direction)) return;
           stepByFrame(direction);
         });
       },
@@ -258,14 +265,17 @@
     return null;
   }
 
-  function clearFrameKeyHoldDirection(direction) {
+  function clearFrameKeyboardHoldDirection(direction) {
     if (direction === -1) frameKeyHeldBack = false;
     else frameKeyHeldForward = false;
   }
 
-  function clearAllFrameKeyHold() {
+  function clearAllFrameHold() {
     frameKeyHeldBack = false;
     frameKeyHeldForward = false;
+    framePointerHeldBack = false;
+    framePointerHeldForward = false;
+    lastFrameStepViaPointer = false;
   }
 
   function revokeBlobUrl() {
@@ -295,6 +305,10 @@
   }
 
   function drawPreviewCanvas() {
+    if (scrubPreviewActive && previewTimeEl instanceof HTMLElement) {
+      const ct = previewVideo.currentTime;
+      if (Number.isFinite(ct)) previewTimeEl.textContent = formatTime(ct);
+    }
     const ctx = previewCanvas.getContext("2d");
     if (!previewVideo.videoWidth) return;
     ctx.imageSmoothingEnabled = true;
@@ -350,6 +364,7 @@
       if (!scrubPreviewActive) {
         setScrubPreviewVisible(true);
         clearPreviewCanvas();
+        if (previewTimeEl instanceof HTMLElement) previewTimeEl.textContent = "";
       }
       updateScrubPreviewFromClientX(clientX);
     } else if (scrubPreviewActive) {
@@ -473,7 +488,6 @@
     const t = timeAtProgressClientX(clientX);
     if (t == null) return;
     lastScrubTime = t;
-    previewTimeEl.textContent = formatTime(t);
     positionScrubPreview(clientX);
     schedulePreviewSeek(t);
   }
@@ -484,7 +498,6 @@
     const clamped = Math.min(1, Math.max(0, ratio));
     const t = clamped * dur;
     lastScrubTime = t;
-    previewTimeEl.textContent = formatTime(t);
     const rect = progressWrap.getBoundingClientRect();
     lastPreviewClientX = rect.left + clamped * rect.width;
     layoutScrubPreviewAtRatio(clamped);
@@ -501,16 +514,13 @@
       return;
     }
     previewSeekInFlight = false;
-    const draw = () => {
-      if (scrubPreviewActive) drawPreviewCanvas();
-    };
-    if (typeof previewVideo.requestVideoFrameCallback === "function") {
-      previewVideo.requestVideoFrameCallback(() => draw());
-    } else {
-      draw();
-    }
+    // Paused preview element: rVFC is unreliable; rAF runs after seek so the label matches the frame drawn.
     requestAnimationFrame(() => {
-      attemptPreviewSeek();
+      if (!scrubPreviewActive) return;
+      drawPreviewCanvas();
+      requestAnimationFrame(() => {
+        attemptPreviewSeek();
+      });
     });
   });
 
@@ -604,8 +614,48 @@
   rateDownBtn.addEventListener("click", () => nudgePlaybackRate(-1));
   rateUpBtn.addEventListener("click", () => nudgePlaybackRate(1));
 
-  frameBackBtn?.addEventListener("click", () => stepByFrame(-1));
-  frameForwardBtn?.addEventListener("click", () => stepByFrame(1));
+  function wireFrameStepButton(btn, direction) {
+    if (!(btn instanceof HTMLElement)) return;
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      try {
+        btn.setPointerCapture(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+      lastFrameStepViaPointer = true;
+      if (direction < 0) framePointerHeldBack = true;
+      else framePointerHeldForward = true;
+      stepByFrame(direction);
+    });
+    btn.addEventListener("click", (e) => {
+      if (lastFrameStepViaPointer) {
+        lastFrameStepViaPointer = false;
+        return;
+      }
+      stepByFrame(direction);
+    });
+    btn.addEventListener("lostpointercapture", () => {
+      if (direction < 0) framePointerHeldBack = false;
+      else framePointerHeldForward = false;
+    });
+  }
+
+  wireFrameStepButton(frameBackBtn, -1);
+  wireFrameStepButton(frameForwardBtn, 1);
+
+  window.addEventListener(
+    "pointerup",
+    (e) => {
+      if (e.button !== 0) return;
+      framePointerHeldBack = false;
+      framePointerHeldForward = false;
+      requestAnimationFrame(() => {
+        lastFrameStepViaPointer = false;
+      });
+    },
+    true
+  );
 
   video.addEventListener("ratechange", () => {
     syncPlaybackRateSelect();
@@ -984,12 +1034,12 @@
   player.addEventListener("keyup", (e) => {
     if (e.target !== player && !player.contains(e.target)) return;
     const frameDir = frameStepDirectionFromKeyEvent(e);
-    if (frameDir != null) clearFrameKeyHoldDirection(frameDir);
+    if (frameDir != null) clearFrameKeyboardHoldDirection(frameDir);
   });
 
-  window.addEventListener("blur", clearAllFrameKeyHold);
+  window.addEventListener("blur", clearAllFrameHold);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") clearAllFrameKeyHold();
+    if (document.visibilityState === "hidden") clearAllFrameHold();
   });
 
   player.tabIndex = 0;
