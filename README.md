@@ -77,49 +77,6 @@ npm install
 
 ---
 
-## Showcase: can the player be embedded *in* the README?
-
-**No — not as a live, interactive iframe inside the GitHub README.**
-
-GitHub renders `README.md` with a fixed, safe subset of Markdown/HTML: **`<iframe>` and custom scripts are not supported**, so you cannot embed the running player *inside* the README the way you would on your own website.
-
-### What works well instead
-
-1. **Link to a hosted demo** — e.g. [GitHub Pages](https://pages.github.com/), Netlify, or Cloudflare Pages pointing at the `video-player` static files over **HTTPS**. Put a clear **“Open live demo”** link near the top of the README.
-2. **Screenshots or a short GIF** — add images under something like `docs/` and reference them with `![Alt](docs/screenshot.png)` so the README still feels visual.
-3. **Embed on a site you control** — any normal page can use an iframe pointing at your hosted player URL.
-
-Example you could use **on your own site** (not in GitHub’s README renderer):
-
-```html
-<iframe
-  title="Tesil Media Player demo"
-  src="https://YOUR-DOMAIN.example/path/to/player/"
-  width="960"
-  height="540"
-  style="max-width:100%; border:0; border-radius:8px;"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-  loading="lazy"
-></iframe>
-```
-
-Replace `src` with your real **https** demo URL after you deploy.
-
-### Optional: GitHub Pages for a “Try it” link
-
-GitHub’s **branch** Pages UI only publishes from the repository **root** or the **`/docs`** folder on a chosen branch. Typical options:
-
-- Copy (or symlink) the contents of [`video-player/`](video-player/) into **`docs/`** on `main` and enable Pages from `/docs`, **or**
-- Use a **GitHub Action** (e.g. publish the `video-player` folder to a `gh-pages` branch or to Pages) so you don’t duplicate files by hand.
-
-After Pages is live, add a line like:
-
-```markdown
-**[Open the live player →](https://becknerd.github.io/Tesil-Player/)** *(update this URL to match your deployment)*
-```
-
----
-
 ## Repository layout
 
 ```
