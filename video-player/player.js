@@ -1268,6 +1268,7 @@
 
   progress.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
+    video.pause();
     player.dataset.scrubbing = "true";
     scrubPointerId = e.pointerId;
     try {
@@ -1288,6 +1289,7 @@
 
   progress.addEventListener("input", () => {
     if (!video.duration || !Number.isFinite(video.duration)) return;
+    video.pause();
     const t = (Number(progress.value) / 1000) * video.duration;
     video.currentTime = t;
     updateTimeDisplay();
@@ -1331,6 +1333,7 @@
     (e) => {
       const ct = e.changedTouches[0];
       if (!(ct.target === progress || progress.contains(ct.target))) return;
+      video.pause();
       player.dataset.scrubbing = "true";
       scrubTouchId = ct.identifier;
       syncScrubPreviewToPointer(ct.clientX, ct.clientY);
