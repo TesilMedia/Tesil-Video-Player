@@ -16,7 +16,9 @@
   },
   "devDependencies": {
     "electron": "28.3.3",
-    "electron-builder": "24.13.3"
+    "electron-builder": "24.13.3",
+    "rcedit": "^4.0.1",
+    "to-ico": "^1.1.5"
   },
   "build": {
     "appId": "com.tesil.videoplayer",
@@ -24,6 +26,7 @@
     "copyright": "Copyright 2026",
     "npmRebuild": false,
     "publish": "never",
+    "afterPack": "./scripts/after-pack-win-metadata.cjs",
     "directories": {
       "output": "dist"
     },
@@ -32,7 +35,9 @@
       "target": [
         {
           "target": "dir",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     }
