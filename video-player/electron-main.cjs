@@ -61,6 +61,13 @@ function createWindow() {
     mainWindow = null;
   });
 
+  /* Touch long-press on <video> often opens the native menu even when the renderer calls preventDefault(). */
+  mainWindow.webContents.on("context-menu", (event, params) => {
+    if (params.mediaType === "video") {
+      event.preventDefault();
+    }
+  });
+
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 }
 

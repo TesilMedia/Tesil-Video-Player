@@ -56,6 +56,10 @@
   let lastScrubTime = 0;
   /** Which pointer owns an in-progress seek drag (document `pointerup` must ignore other pointers). */
   let scrubPointerId = null;
+  /** Touch `Touch.identifier` for the finger scrubbing the seek bar (PE `pointermove` is often missing during native range drags). */
+  let scrubTouchId = null;
+  /** Touch `pointerId`s whose `pointerdown` was on the player; used to catch long-press menus when MQs still report a fine pointer (Windows hybrid). */
+  const activeTouchPointersOnPlayer = new Set();
 
   const MIN_ZOOM = 1;
   const MAX_ZOOM = 4;
@@ -576,21 +580,42 @@
     ) {
       return;
     }
-    if (e instanceof PointerEvent) {
+    let endClientX;
+    let endClientY;
+    if (e instanceof TouchEvent && e.changedTouches.length) {
+      const tid = scrubTouchId;
+      for (let i = 0; i < e.changedTouches.length; i += 1) {
+        const t = e.changedTouches[i];
+        if (tid == null || t.identifier === tid) {
+          endClientX = t.clientX;
+          endClientY = t.clientY;
+          break;
+        }
+      }
+    } else if (e instanceof PointerEvent) {
+      endClientX = e.clientX;
+      endClientY = e.clientY;
+    }
+    const capId = scrubPointerId;
+    if (capId != null) {
       try {
-        if (progress.hasPointerCapture(e.pointerId)) {
-          progress.releasePointerCapture(e.pointerId);
+        if (progress.hasPointerCapture(capId)) {
+          progress.releasePointerCapture(capId);
         }
       } catch (_) {
         /* ignore */
       }
     }
     scrubPointerId = null;
+    scrubTouchId = null;
     player.dataset.scrubbing = "false";
     syncProgressFromVideo();
     armChromeIdleTimer();
-    const ev = e;
-    if (ev && "clientX" in ev && !isPointOverScrubHitZone(ev.clientX, ev.clientY)) {
+    if (
+      endClientX != null &&
+      endClientY != null &&
+      !isPointOverScrubHitZone(endClientX, endClientY)
+    ) {
       hideScrubPreview();
     }
   }
@@ -1135,7 +1160,37 @@
     bumpChromeActivity();
   });
   /* Bubble so videoViewport pointerdown runs first and viewportPointers reflects two-finger pinch. */
-  player.addEventListener("pointerdown", bumpChromeActivity);
+  player.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "touch" && e.target instanceof Node && player.contains(e.target)) {
+      activeTouchPointersOnPlayer.add(e.pointerId);
+    }
+    bumpChromeActivity();
+  });
+  function forgetPlayerTouchPointer(e) {
+    if (e.pointerType !== "touch") return;
+    activeTouchPointersOnPlayer.delete(e.pointerId);
+  }
+  document.addEventListener("pointerup", forgetPlayerTouchPointer, true);
+  document.addEventListener("pointercancel", forgetPlayerTouchPointer, true);
+  /** Long-press / synthetic “right click”: capture on `document` so it still runs if a child swallows the event. */
+  document.addEventListener(
+    "contextmenu",
+    (e) => {
+      if (!(e.target instanceof Node) || !player.contains(e.target)) return;
+      const cap = e.sourceCapabilities;
+      const hoverNone =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(hover: none)").matches;
+      const touchLike =
+        (cap && cap.firesTouchEvents === true) ||
+        e.pointerType === "touch" ||
+        (activeTouchPointersOnPlayer.size > 0 && hoverNone);
+      if (!touchLike) return;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    true
+  );
   player.addEventListener("keydown", bumpChromeActivity, true);
   player.addEventListener("wheel", bumpChromeActivity, { passive: true });
   player.addEventListener("focusin", (e) => {
@@ -1253,19 +1308,78 @@
   progress.addEventListener("pointercancel", (e) => {
     if (player.dataset.scrubbing !== "true") return;
     if (scrubPointerId != null && e.pointerId !== scrubPointerId) return;
-    try {
-      if (progress.hasPointerCapture(e.pointerId)) {
-        progress.releasePointerCapture(e.pointerId);
+    const capId = scrubPointerId;
+    if (capId != null) {
+      try {
+        if (progress.hasPointerCapture(capId)) {
+          progress.releasePointerCapture(capId);
+        }
+      } catch (_) {
+        /* ignore */
       }
-    } catch (_) {
-      /* ignore */
     }
     scrubPointerId = null;
+    scrubTouchId = null;
     player.dataset.scrubbing = "false";
     syncProgressFromVideo();
     hideScrubPreview();
     armChromeIdleTimer();
   });
+
+  progress.addEventListener(
+    "touchstart",
+    (e) => {
+      const ct = e.changedTouches[0];
+      if (!(ct.target === progress || progress.contains(ct.target))) return;
+      player.dataset.scrubbing = "true";
+      scrubTouchId = ct.identifier;
+      syncScrubPreviewToPointer(ct.clientX, ct.clientY);
+      bumpChromeActivity();
+    },
+    { passive: true }
+  );
+
+  function touchForActiveScrub(e) {
+    if (scrubTouchId != null) {
+      const t = [...e.touches].find((x) => x.identifier === scrubTouchId);
+      if (t) return t;
+    }
+    if (scrubPointerId != null && e.touches.length === 1) return e.touches[0];
+    return null;
+  }
+
+  document.addEventListener(
+    "touchmove",
+    (e) => {
+      if (player.dataset.scrubbing !== "true") return;
+      const t = touchForActiveScrub(e);
+      if (!t) return;
+      e.preventDefault();
+      const pr = player.getBoundingClientRect();
+      const inside =
+        t.clientX >= pr.left &&
+        t.clientX <= pr.right &&
+        t.clientY >= pr.top &&
+        t.clientY <= pr.bottom;
+      if (inside) player.classList.remove("player--pointer-outside");
+      syncScrubPreviewToPointer(t.clientX, t.clientY);
+      bumpChromeActivity();
+    },
+    { passive: false }
+  );
+
+  function endTouchScrubIfLifted(e) {
+    if (player.dataset.scrubbing !== "true" || scrubTouchId == null) return;
+    for (let i = 0; i < e.changedTouches.length; i += 1) {
+      if (e.changedTouches[i].identifier === scrubTouchId) {
+        endProgressScrubIfNeeded(e);
+        return;
+      }
+    }
+  }
+
+  document.addEventListener("touchend", endTouchScrubIfLifted, true);
+  document.addEventListener("touchcancel", endTouchScrubIfLifted, true);
 
   volumeSlider.addEventListener("input", () => {
     const v = Number(volumeSlider.value);

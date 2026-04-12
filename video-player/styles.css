@@ -185,6 +185,7 @@ body::-webkit-scrollbar {
   /* Scale controls with the player width (avoids clipping under overflow:hidden) */
   container-type: inline-size;
   container-name: player;
+  -webkit-touch-callout: none;
   /* All chrome scales with player width (cqw); one row, no breakpoint wrap */
   --chrome-control-height: clamp(0.98rem, 0.06rem + 8.8cqw, 2.5rem);
   --chrome-font-size: clamp(0.4rem, 0.05rem + 3.35cqw, 0.875rem);
@@ -211,6 +212,7 @@ body::-webkit-scrollbar {
   z-index: 0;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   /* Tap-to-play and sliders work reliably; avoids double-tap zoom on the page when not panning. */
   touch-action: manipulation;
 }
@@ -252,6 +254,7 @@ body::-webkit-scrollbar {
   -webkit-user-drag: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /*
@@ -399,6 +402,8 @@ body::-webkit-scrollbar {
   margin-bottom: var(--chrome-gap);
   display: flex;
   align-items: center;
+  /* Let the seek bar own horizontal drags on touch; avoids missing PE moves + UA gesture stealing. */
+  touch-action: none;
 }
 
 .player__scrub-preview {
@@ -448,6 +453,7 @@ body::-webkit-scrollbar {
   background: transparent;
   border-radius: 5px;
   cursor: pointer;
+  touch-action: none;
 }
 
 .player__progress::-webkit-slider-runnable-track {
