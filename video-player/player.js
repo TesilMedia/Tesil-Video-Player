@@ -73,8 +73,12 @@
   const MIN_ZOOM = 1;
   const MAX_ZOOM = 4;
   const ZOOM_STEP = 0.25;
+  const usesCoarsePrimaryPointer =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches;
+
   /** At 1× zoom, movement past this before pointerup cancels tap-to-play (scroll starting on the player). */
-  const VIEWPORT_TAP_CANCEL_MOVE_PX = 12;
+  const VIEWPORT_TAP_CANCEL_MOVE_PX = usesCoarsePrimaryPointer ? 18 : 12;
   /** Two-finger span must reach this (px) before pinch-zoom activates (avoids jitter when touches start close). */
   const PINCH_MIN_START_DIST_PX = 28;
   /** Clamp per-move scale ratio so a bad frame does not explode zoom. */
@@ -1408,7 +1412,7 @@
   videoViewport.addEventListener("pointerup", endViewportPointer);
   videoViewport.addEventListener("pointercancel", endViewportPointer);
 
-  const IDLE_UI_MS = 2000;
+  const IDLE_UI_MS = usesCoarsePrimaryPointer ? 3800 : 2000;
   let chromeIdleTimer = null;
 
   /** True while a continuous interaction should keep the HUD up without a running idle timer. */
@@ -1479,6 +1483,8 @@
   player.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "touch" && e.target instanceof Node && player.contains(e.target)) {
       activeTouchPointersOnPlayer.add(e.pointerId);
+      pointerInsidePlayer = true;
+      player.classList.remove("player--pointer-outside");
     }
     bumpChromeActivity();
   });
@@ -1777,14 +1783,60 @@
   });
 
   fullscreenBtn.addEventListener("click", async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await player.requestFullscreen();
+    if (
+      !isExternalEmbedSource() &&
+      typeof video.webkitDisplayingFullscreen === "boolean" &&
+      video.webkitDisplayingFullscreen &&
+      typeof video.webkitExitFullscreen === "function"
+    ) {
+      try {
+        video.webkitExitFullscreen();
+      } catch (_) {
+        /* not allowed */
       }
-    } catch {
-      /* not allowed */
+      return;
+    }
+
+    const inFs =
+      document.fullscreenElement != null || document.webkitFullscreenElement != null;
+    if (inFs) {
+      try {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+      } catch (_) {
+        /* not allowed */
+      }
+      return;
+    }
+
+    const tryWebKitVideo =
+      !isExternalEmbedSource() && typeof video.webkitEnterFullscreen === "function";
+
+    if (document.fullscreenEnabled !== false) {
+      try {
+        if (typeof player.requestFullscreen === "function") {
+          await player.requestFullscreen();
+          return;
+        }
+      } catch (_) {
+        /* iOS Safari often rejects element fullscreen */
+      }
+      try {
+        if (typeof player.webkitRequestFullscreen === "function") {
+          await player.webkitRequestFullscreen();
+          return;
+        }
+      } catch (_) {
+        /* not allowed */
+      }
+    }
+
+    if (tryWebKitVideo) {
+      try {
+        video.webkitEnterFullscreen();
+      } catch (_) {
+        /* not allowed */
+      }
     }
   });
 

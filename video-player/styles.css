@@ -29,6 +29,8 @@ html {
   height: 100%;
   overflow-x: hidden;
   scrollbar-width: none;
+  /* Softer than default gray flash on tap (iOS / WebKit). */
+  -webkit-tap-highlight-color: rgba(138, 180, 248, 0.18);
 }
 
 html::-webkit-scrollbar {
@@ -46,6 +48,8 @@ body {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
+  /* Keeps rubber-band scroll from fighting the player on iOS. */
+  overscroll-behavior-y: contain;
 }
 
 body::-webkit-scrollbar {
@@ -58,6 +62,10 @@ body::-webkit-scrollbar {
   max-width: 960px;
   margin: 0 auto;
   padding: 1.5rem;
+  padding-top: max(1.5rem, env(safe-area-inset-top, 0px));
+  padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
 }
 
 .title {
@@ -90,6 +98,19 @@ body::-webkit-scrollbar {
   line-height: 1.65;
   display: grid;
   gap: 0.35rem;
+}
+
+.commands__hint--touch {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .commands__hint--desktop {
+    display: none;
+  }
+  .commands__hint--touch {
+    display: list-item;
+  }
 }
 
 .commands kbd {
@@ -342,8 +363,8 @@ body::-webkit-scrollbar {
 
 .player__corner-tools {
   position: absolute;
-  top: clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem);
-  right: clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem);
+  top: max(clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem), env(safe-area-inset-top, 0px));
+  right: max(clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem), env(safe-area-inset-right, 0px));
   z-index: 2;
   display: flex;
   flex-direction: row;
@@ -354,8 +375,8 @@ body::-webkit-scrollbar {
 
 .player__corner-volume {
   position: absolute;
-  top: clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem);
-  left: clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem);
+  top: max(clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem), env(safe-area-inset-top, 0px));
+  left: max(clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem), env(safe-area-inset-left, 0px));
   z-index: 2;
   display: flex;
   flex-direction: row;
@@ -372,8 +393,14 @@ body::-webkit-scrollbar {
   z-index: 2;
   /* Shared with `.player__bar-tools` so the PiP/fullscreen cluster lines up with other chrome pills. */
   --chrome-pad-x: clamp(0.22rem, 0.03rem + 1.8cqw, 0.75rem);
-  --chrome-pad-b: clamp(0.32rem, 0.1rem + 1.35cqw, 0.6rem);
-  padding: clamp(0.42rem, 0.18rem + 2.4cqw, 0.95rem) var(--chrome-pad-x) var(--chrome-pad-b);
+  --chrome-pad-b: max(
+    clamp(0.32rem, 0.1rem + 1.35cqw, 0.6rem),
+    env(safe-area-inset-bottom, 0px)
+  );
+  padding-top: clamp(0.42rem, 0.18rem + 2.4cqw, 0.95rem);
+  padding-right: max(var(--chrome-pad-x), env(safe-area-inset-right, 0px));
+  padding-bottom: var(--chrome-pad-b);
+  padding-left: max(var(--chrome-pad-x), env(safe-area-inset-left, 0px));
   background: transparent;
   /* Do not set overflow-x on this ancestor: it clips the scrub preview (above the seek bar). */
   overflow: visible;
@@ -548,7 +575,7 @@ body::-webkit-scrollbar {
 /* Bottom-right cluster: same anchoring idea as `.player__corner-tools` (fixed to frame, not bar flex). */
 .player__bar-tools {
   position: absolute;
-  right: var(--chrome-pad-x);
+  right: max(var(--chrome-pad-x), env(safe-area-inset-right, 0px));
   bottom: var(--chrome-pad-b);
   z-index: 9;
   display: flex;
@@ -640,6 +667,14 @@ body::-webkit-scrollbar {
 }
 
 .player__btn:hover {
+  background: var(--chrome-control-bg-hover);
+}
+
+.player__btn:active,
+.player__zoom-group .player__btn:active,
+.player__windows-group .player__btn:active,
+.player__volume > .player__volume-mute:active,
+.player__rate .player__btn:active {
   background: var(--chrome-control-bg-hover);
 }
 
@@ -969,4 +1004,43 @@ body::-webkit-scrollbar {
 
 .tooltip-layer[hidden] {
   display: none !important;
+}
+
+/* Touch / iPhone: ~44pt targets, larger thumbs, 16px inputs (avoids iOS focus-zoom). */
+@media (pointer: coarse) {
+  .upload-row__btn,
+  .url-row__btn {
+    min-height: 44px;
+    padding: 0.55rem 1.15rem;
+  }
+
+  .url-row__input {
+    min-height: 44px;
+    font-size: 1rem;
+    padding: 0.55rem 0.75rem;
+  }
+
+  .player {
+    --chrome-control-height: clamp(2.6rem, 0.55rem + 9cqw, 3rem);
+    --chrome-font-size: clamp(0.8rem, 0.14rem + 3.4cqw, 0.95rem);
+    --chrome-gap: clamp(0.2rem, 0.02rem + 1.9cqw, 0.55rem);
+  }
+
+  .player__progress {
+    --range-thumb: clamp(18px, 0.45rem + 2.8cqw, 24px);
+    --range-track-h: clamp(10px, 0.32rem + 1.5cqw, 14px);
+  }
+
+  .player__progress-wrap {
+    padding-block: 4px;
+  }
+
+  .player__volume-slider {
+    --vol-thumb: clamp(18px, 0.45rem + 2.8cqw, 24px);
+    --vol-track-h: clamp(10px, 0.32rem + 1.5cqw, 14px);
+  }
+
+  .tooltip-layer {
+    max-width: min(20em, calc(100vw - max(16px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+  }
 }

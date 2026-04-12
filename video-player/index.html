@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <!-- YouTube embeds require a normal referrer; without this, many setups get error 153 for every video. -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="theme-color" content="#0f1114" />
@@ -318,8 +321,16 @@
           <li><kbd>F</kbd> Fullscreen</li>
           <li><kbd>[</kbd> <kbd>]</kbd> Slower / faster playback</li>
           <li><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd> Zoom in / out / reset</li>
-          <li>Scroll wheel on video — zoom toward pointer</li>
+          <li class="commands__hint commands__hint--desktop">
+            Scroll wheel on video — zoom toward pointer
+          </li>
           <li>Drag video when zoomed — pan</li>
+          <li class="commands__hint commands__hint--touch">
+            Touch: tap video for play/pause · two-finger pinch to zoom · drag to pan when zoomed
+          </li>
+          <li class="commands__hint commands__hint--touch">
+            On iPhone, use the volume buttons; fullscreen may use the system video viewer.
+          </li>
         </ul>
       </section>
     </main>
