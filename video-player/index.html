@@ -130,7 +130,7 @@
               class="player__btn"
               id="zoomOut"
               aria-label="Zoom out"
-              data-tooltip="Zoom out (−)"
+              data-tooltip="Zoom out (−, hold to repeat)"
             >
               −
             </button>
@@ -148,7 +148,7 @@
               class="player__btn"
               id="zoomIn"
               aria-label="Zoom in"
-              data-tooltip="Zoom in (+)"
+              data-tooltip="Zoom in (+, hold to repeat)"
             >
               +
             </button>
@@ -160,11 +160,11 @@
               class="player__btn"
               id="rateDown"
               aria-label="Slower"
-              data-tooltip="Slower ([)"
+              data-tooltip="Slower ([, hold to repeat)"
             >
               −
             </button>
-            <div class="player__rate-select-wrap" data-tooltip="Playback speed ([ / ])">
+            <div class="player__rate-select-wrap" data-tooltip="Playback speed ([ / ], hold to repeat)">
               <select id="playbackRate" class="player__rate-select" aria-label="Playback speed">
                 <option value="0.25">0.25×</option>
                 <option value="0.5">0.5×</option>
@@ -181,7 +181,7 @@
               class="player__btn"
               id="rateUp"
               aria-label="Faster"
-              data-tooltip="Faster (])"
+              data-tooltip="Faster (], hold to repeat)"
             >
               +
             </button>
@@ -316,8 +316,8 @@
           <li><kbd>↑</kbd> <kbd>↓</kbd> Volume</li>
           <li><kbd>M</kbd> Mute</li>
           <li><kbd>F</kbd> Fullscreen</li>
-          <li><kbd>[</kbd> <kbd>]</kbd> Slower / faster playback</li>
-          <li><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd> Zoom in / out / reset</li>
+          <li><kbd>[</kbd> <kbd>]</kbd> Slower / faster playback (hold to repeat)</li>
+          <li><kbd>+</kbd> <kbd>−</kbd> Zoom in / out (hold to repeat) · <kbd>0</kbd> reset zoom</li>
           <li class="commands__hint commands__hint--desktop">
             Scroll wheel on video — zoom toward pointer
           </li>

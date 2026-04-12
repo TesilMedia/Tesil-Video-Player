@@ -427,6 +427,8 @@
   const FALLBACK_FRAME_PERIOD = 1 / 30;
   /** Hold-to-repeat only starts after this many ms so quick taps stay single-step. */
   const FRAME_HOLD_REPEAT_DELAY_MS = 300;
+  /** After the initial delay, zoom / playback-rate keys and buttons repeat at this interval. */
+  const CHROME_HOLD_INTERVAL_MS = 100;
 
   const DT_SAMPLE_CAP = 48;
   const MIN_FRAME_PERIOD = 1 / 120;
@@ -659,6 +661,174 @@
     disarmKeyboardFrameHoldRepeat(1);
     disarmPointerFrameHoldRepeat(-1);
     disarmPointerFrameHoldRepeat(1);
+  }
+
+  /** @type {Set<() => void>} */
+  const chromePointerHoldDisarms = new Set();
+
+  /** Keyboard hold-repeat for zoom (+ / −) and playback rate ([ / ]). */
+  let zoomKbActiveDir = /** @type {0 | 1 | -1} */ (0);
+  let zoomKbDelayId = null;
+  let zoomKbIntervalId = null;
+  let rateKbActiveDir = /** @type {0 | 1 | -1} */ (0);
+  let rateKbDelayId = null;
+  let rateKbIntervalId = null;
+
+  function disarmZoomKbRepeat() {
+    zoomKbActiveDir = 0;
+    if (zoomKbDelayId != null) {
+      clearTimeout(zoomKbDelayId);
+      zoomKbDelayId = null;
+    }
+    if (zoomKbIntervalId != null) {
+      clearInterval(zoomKbIntervalId);
+      zoomKbIntervalId = null;
+    }
+  }
+
+  function disarmRateKbRepeat() {
+    rateKbActiveDir = 0;
+    if (rateKbDelayId != null) {
+      clearTimeout(rateKbDelayId);
+      rateKbDelayId = null;
+    }
+    if (rateKbIntervalId != null) {
+      clearInterval(rateKbIntervalId);
+      rateKbIntervalId = null;
+    }
+  }
+
+  function disarmZoomRateKeyboardHolds() {
+    disarmZoomKbRepeat();
+    disarmRateKbRepeat();
+  }
+
+  function disarmAllChromePointerHolds() {
+    for (const d of [...chromePointerHoldDisarms]) {
+      try {
+        d();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    chromePointerHoldDisarms.clear();
+  }
+
+  function isZoomInKeyEvent(e) {
+    return (
+      e.code === "NumpadAdd" ||
+      e.key === "=" ||
+      e.key === "+" ||
+      e.code === "Equal"
+    );
+  }
+
+  function isZoomOutKeyEvent(e) {
+    return (
+      e.code === "NumpadSubtract" ||
+      e.code === "Minus" ||
+      e.key === "-" ||
+      e.key === "_"
+    );
+  }
+
+  /**
+   * @param {1 | -1} dir
+   */
+  function zoomKbKeydown(dir) {
+    disarmZoomKbRepeat();
+    zoomKbActiveDir = dir;
+    adjustZoomByStep(dir);
+    zoomKbDelayId = window.setTimeout(() => {
+      zoomKbDelayId = null;
+      if (zoomKbActiveDir !== dir) return;
+      zoomKbIntervalId = window.setInterval(() => {
+        if (zoomKbActiveDir === dir) adjustZoomByStep(dir);
+      }, CHROME_HOLD_INTERVAL_MS);
+    }, FRAME_HOLD_REPEAT_DELAY_MS);
+  }
+
+  /**
+   * @param {1 | -1} dir
+   */
+  function zoomKbKeyup(dir) {
+    if (zoomKbActiveDir !== dir) return;
+    disarmZoomKbRepeat();
+  }
+
+  /**
+   * @param {1 | -1} dir  1 = faster, -1 = slower (matches `nudgePlaybackRate`)
+   */
+  function rateKbKeydown(dir) {
+    disarmRateKbRepeat();
+    rateKbActiveDir = dir;
+    nudgePlaybackRate(dir);
+    rateKbDelayId = window.setTimeout(() => {
+      rateKbDelayId = null;
+      if (rateKbActiveDir !== dir) return;
+      rateKbIntervalId = window.setInterval(() => {
+        if (rateKbActiveDir === dir) nudgePlaybackRate(dir);
+      }, CHROME_HOLD_INTERVAL_MS);
+    }, FRAME_HOLD_REPEAT_DELAY_MS);
+  }
+
+  /**
+   * @param {1 | -1} dir
+   */
+  function rateKbKeyup(dir) {
+    if (rateKbActiveDir !== dir) return;
+    disarmRateKbRepeat();
+  }
+
+  /**
+   * Hold-to-repeat for zoom ± and rate ± buttons (same delay/interval as keyboard).
+   * @param {HTMLElement} btn
+   * @param {() => void} stepFn
+   */
+  function wireHeldChromeButton(btn, stepFn) {
+    let delayId = null;
+    let intervalId = null;
+    let viaPointer = false;
+
+    function disarm() {
+      if (delayId != null) {
+        clearTimeout(delayId);
+        delayId = null;
+      }
+      if (intervalId != null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      chromePointerHoldDisarms.delete(disarm);
+    }
+
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      try {
+        btn.setPointerCapture(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+      viaPointer = true;
+      disarm();
+      chromePointerHoldDisarms.add(disarm);
+      stepFn();
+      delayId = window.setTimeout(() => {
+        delayId = null;
+        intervalId = window.setInterval(() => stepFn(), CHROME_HOLD_INTERVAL_MS);
+      }, FRAME_HOLD_REPEAT_DELAY_MS);
+    });
+    btn.addEventListener("click", () => {
+      if (viaPointer) {
+        viaPointer = false;
+        return;
+      }
+      stepFn();
+    });
+    btn.addEventListener("lostpointercapture", () => {
+      disarm();
+      bumpChromeActivity();
+    });
   }
 
   function revokeBlobUrl() {
@@ -1471,8 +1641,8 @@
     if (Number.isFinite(v)) video.playbackRate = v;
   });
 
-  rateDownBtn.addEventListener("click", () => nudgePlaybackRate(-1));
-  rateUpBtn.addEventListener("click", () => nudgePlaybackRate(1));
+  wireHeldChromeButton(rateDownBtn, () => nudgePlaybackRate(-1));
+  wireHeldChromeButton(rateUpBtn, () => nudgePlaybackRate(1));
 
   function wireFrameStepButton(btn, direction) {
     if (!(btn instanceof HTMLElement)) return;
@@ -1520,6 +1690,7 @@
       disarmPointerFrameHoldRepeat(1);
       framePointerHeldBack = false;
       framePointerHeldForward = false;
+      disarmAllChromePointerHolds();
       requestAnimationFrame(() => {
         lastFrameStepViaPointer = false;
         bumpChromeActivity();
@@ -1755,6 +1926,9 @@
     if (player.dataset.scrubbing === "true") return true;
     if (frameKeyHeldBack || frameKeyHeldForward) return true;
     if (framePointerHeldBack || framePointerHeldForward) return true;
+    if (zoomKbDelayId != null || zoomKbIntervalId != null) return true;
+    if (rateKbDelayId != null || rateKbIntervalId != null) return true;
+    if (chromePointerHoldDisarms.size > 0) return true;
     return false;
   }
 
@@ -1920,8 +2094,8 @@
     { passive: false }
   );
 
-  zoomInBtn.addEventListener("click", () => adjustZoomByStep(1));
-  zoomOutBtn.addEventListener("click", () => adjustZoomByStep(-1));
+  wireHeldChromeButton(zoomInBtn, () => adjustZoomByStep(1));
+  wireHeldChromeButton(zoomOutBtn, () => adjustZoomByStep(-1));
   zoomResetBtn.addEventListener("click", () => setZoomLevel(1));
 
   new ResizeObserver(() => {
@@ -2300,12 +2474,26 @@
     bumpChromeActivity();
     if (e.code === "BracketLeft") {
       e.preventDefault();
-      if (!e.repeat) nudgePlaybackRate(-1);
+      if (e.repeat) return;
+      rateKbKeydown(-1);
       return;
     }
     if (e.code === "BracketRight") {
       e.preventDefault();
-      if (!e.repeat) nudgePlaybackRate(1);
+      if (e.repeat) return;
+      rateKbKeydown(1);
+      return;
+    }
+    if (isZoomInKeyEvent(e)) {
+      e.preventDefault();
+      if (e.repeat) return;
+      zoomKbKeydown(1);
+      return;
+    }
+    if (isZoomOutKeyEvent(e)) {
+      e.preventDefault();
+      if (e.repeat) return;
+      zoomKbKeydown(-1);
       return;
     }
     const frameDir = frameStepDirectionFromKeyEvent(e);
@@ -2358,16 +2546,6 @@
         e.preventDefault();
         fullscreenBtn.click();
         break;
-      case "+":
-      case "=":
-        e.preventDefault();
-        if (!e.repeat) adjustZoomByStep(1);
-        break;
-      case "-":
-      case "_":
-        e.preventDefault();
-        if (!e.repeat) adjustZoomByStep(-1);
-        break;
       case "0":
         e.preventDefault();
         if (!e.repeat) setZoomLevel(1);
@@ -2384,6 +2562,10 @@
       clearFrameKeyboardHoldDirection(frameDir);
       bumpChromeActivity();
     }
+    if (e.code === "BracketLeft") rateKbKeyup(-1);
+    if (e.code === "BracketRight") rateKbKeyup(1);
+    if (isZoomInKeyEvent(e)) zoomKbKeyup(1);
+    if (isZoomOutKeyEvent(e)) zoomKbKeyup(-1);
   }
 
   document.addEventListener("keydown", onPlayerKeydown, true);
@@ -2391,10 +2573,16 @@
 
   window.addEventListener("blur", () => {
     clearAllFrameHold();
+    disarmZoomRateKeyboardHolds();
+    disarmAllChromePointerHolds();
     pointerInsidePlayer = false;
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") clearAllFrameHold();
+    if (document.visibilityState === "hidden") {
+      clearAllFrameHold();
+      disarmZoomRateKeyboardHolds();
+      disarmAllChromePointerHolds();
+    }
   });
 
   player.tabIndex = 0;
