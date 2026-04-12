@@ -1,4 +1,4 @@
-# electron-builder --win dir (no NSIS), then 7-Zip SFX → one .exe users download and run.
+# electron-builder --win zip → portable .zip (extract anywhere, run the .exe inside).
 
 name: Windows release
 
@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Build unpacked app + self-extracting .exe
+      - name: Build portable Windows .zip
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           ELECTRON_BUILDER_CACHE: C:\eb
@@ -49,81 +49,24 @@ jobs:
           }
 
           $distRoot = Join-Path $b "dist"
-          $unpacked = Join-Path $distRoot "win-unpacked"
-          if (-not (Test-Path $unpacked)) {
-            $pick = Get-ChildItem $distRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
-              (Get-ChildItem $_.FullName -Filter *.exe -File -ErrorAction SilentlyContinue).Count -gt 0
-            } | Select-Object -First 1
-            if ($pick) { $unpacked = $pick.FullName }
+          $zip = Get-ChildItem -Path $distRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $zip) {
+            Get-ChildItem $distRoot -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Name }
+            throw "No .zip output under dist/"
           }
-          if (-not (Test-Path $unpacked)) {
-            Get-ChildItem $distRoot | ForEach-Object { Write-Host $_.Name }
-            throw "No win-unpacked output under dist/"
-          }
-
-          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
-          $appFolder = $pkg.build.productName
-          $exeLeaf = "$appFolder.exe"
-          $runRel = "$appFolder\$exeLeaf"
-
-          $wrapRoot = Join-Path $env:RUNNER_TEMP "sfxpackroot"
-          if (Test-Path $wrapRoot) { Remove-Item $wrapRoot -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $wrapRoot | Out-Null
-          $appDir = Join-Path $wrapRoot $appFolder
-          New-Item -ItemType Directory -Force -Path $appDir | Out-Null
-          Get-ChildItem -LiteralPath $unpacked | Copy-Item -Destination $appDir -Recurse -Force
-
-          $7z = "C:\Program Files\7-Zip\7z.exe"
-          if (-not (Test-Path $7z)) { $7z = "C:\Program Files (x86)\7-Zip\7z.exe" }
-          if (-not (Test-Path $7z)) { throw "7-Zip not found on runner" }
-
-          $sevenDir = Split-Path $7z
-          $sfx = Join-Path $sevenDir "7zSD.sfx"
-          if (-not (Test-Path $sfx)) { $sfx = Join-Path $sevenDir "7z.sfx" }
-          if (-not (Test-Path $sfx)) { throw "7-Zip SFX module not found next to 7z.exe" }
-
-          $stg = Join-Path $env:RUNNER_TEMP "sfxpack"
-          if (Test-Path $stg) { Remove-Item $stg -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $stg | Out-Null
-          $pack7z = Join-Path $stg "app.7z"
-
-          $toPack = Join-Path $wrapRoot $appFolder
-          Push-Location $wrapRoot
-          & $7z a -t7z -mx5 -r $pack7z ("{0}\*" -f $toPack)
-          $z7 = $LASTEXITCODE
-          Pop-Location
-          if ($z7 -ne 0) { throw "7z archive failed: exit code $z7" }
-
-          $outName = "$appFolder-$($pkg.version)-Windows.exe"
-          $outExe = Join-Path $distRoot $outName
-          if (Test-Path $outExe) { Remove-Item $outExe -Force }
-
-          $cfg = Join-Path $stg "sfx-config.txt"
-          $cfgLines = @(
-            ';!@Install@!UTF-8!'
-            'Title="Tesil Media Player"'
-            'BeginPrompt="This will extract Tesil Media Player to your Downloads folder (you can change the path) and start it."'
-            'InstallPath="%USERPROFILE%\Downloads\Tesil Media Player"'
-            'ExtractPathText="Extract to:"'
-            'GUIFlags="64+4096"'
-            "RunProgram=`"$runRel`""
-          )
-          [IO.File]::WriteAllLines($cfg, $cfgLines, [Text.UTF8Encoding]::new($false))
-
-          cmd.exe /c ('copy /b "{0}"+"{1}"+"{2}" "{3}"' -f $sfx, $cfg, $pack7z, $outExe)
-          if ($LASTEXITCODE -ne 0) { throw "copy /b SFX merge failed: exit code $LASTEXITCODE" }
-          if (-not (Test-Path $outExe)) { throw "SFX output missing: $outExe" }
-          Write-Host "Built $outExe size=$((Get-Item $outExe).Length)"
+          Write-Host "Built $($zip.FullName) size=$((Get-Item $zip.FullName).Length)"
 
           $distDest = Join-Path $src "dist"
           New-Item -ItemType Directory -Force -Path $distDest | Out-Null
-          Copy-Item $outExe $distDest -Force
+          Copy-Item $zip.FullName $distDest -Force
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: video-player/dist/*.exe
+          files: video-player/dist/*.zip
           fail_on_unmatched_files: true
           generate_release_notes: true
         env:
@@ -134,7 +77,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Tesil-Media-Player-Windows
-          path: video-player/dist/*.exe
+          path: video-player/dist/*.zip
 
       - name: Logs on failure
         if: failure()
