@@ -43,7 +43,7 @@ jobs:
           $pkg = Get-Content package.json -Raw | ConvertFrom-Json
           $product = $pkg.build.productName
           $ver = $pkg.version
-          $zipName = "Tesil-Media-Player-$ver-Windows-portable.zip"
+          $zipName = "Tesil-Video-Player-$ver-Windows-portable.zip"
           $zipPath = Join-Path (Join-Path (Get-Location).Path "dist") $zipName
 
           $stage = Join-Path $env:RUNNER_TEMP "tesil-portable"
@@ -71,7 +71,7 @@ jobs:
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: Tesil-Media-Player-Windows
+          name: Tesil-Video-Player-Windows
           path: video-player/dist/*.zip
 
       - name: Logs on failure

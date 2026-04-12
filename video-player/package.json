@@ -1,8 +1,8 @@
 {
-  "name": "tesil-media-player",
+  "name": "tesil-video-player",
   "version": "1.1.9",
   "private": true,
-  "description": "Tesil Media Player for Windows (desktop)",
+  "description": "Tesil Video Player for Windows (desktop)",
   "author": "becknerd",
   "homepage": "https://github.com/becknerd/Tesil-Player",
   "repository": {
@@ -19,8 +19,8 @@
     "electron-builder": "24.13.3"
   },
   "build": {
-    "appId": "com.tesil.mediaplayer",
-    "productName": "Tesil Media Player",
+    "appId": "com.tesil.videoplayer",
+    "productName": "Tesil Video Player",
     "copyright": "Copyright 2026",
     "npmRebuild": false,
     "publish": "never",

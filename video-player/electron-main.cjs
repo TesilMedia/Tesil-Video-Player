@@ -2,7 +2,7 @@
 
 const { app, BrowserWindow, ipcMain } = require("electron");
 
-app.setName("Tesil Media Player");
+app.setName("Tesil Video Player");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");

@@ -1,4 +1,4 @@
-# Tesil Media Player
+# Tesil Video Player
 
 A focused **video player** for **Windows (desktop)** and **the browser**: open files, paste URLs, scrub with a live preview, zoom and pan, frame-step, and keyboard-driven controls.
 
@@ -8,7 +8,7 @@ A focused **video player** for **Windows (desktop)** and **the browser**: open f
 
 ## Download (Windows)
 
-Portable builds are attached to each GitHub **Release** (`.zip` containing `Tesil Media Player.exe` and dependencies). Extract anywhere and run the executable, or use **Open with** from File Explorer on a supported video file.
+Portable builds are attached to each GitHub **Release** (`.zip` containing `Tesil Video Player.exe` and dependencies). Extract anywhere and run the executable, or use **Open with** from File Explorer on a supported video file.
 
 ---
 
