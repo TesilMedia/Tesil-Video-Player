@@ -62,6 +62,10 @@
   /** Latest scrub time while preview is active; not cleared until seek pipeline catches up or hide. */
   let previewDesiredTime = null;
   let previewSeekInFlight = false;
+  /** Like `frameStepGen`: ignore stale `seeked` draws when a newer hover target was queued. */
+  let previewSeekGen = 0;
+  /** Generation for the in-flight preview seek (set when assigning `previewVideo.currentTime`). */
+  let previewSeekInFlightGen = 0;
   let lastScrubTime = 0;
   /** Which pointer owns an in-progress seek drag (document `pointerup` must ignore other pointers). */
   let scrubPointerId = null;
@@ -974,11 +978,8 @@
     ctx.clearRect(0, 0, PREVIEW_W, PREVIEW_H);
   }
 
+  /** Thumbnail only; the hover timestamp is updated from the pointer (`formatTime(t)`) so it tracks immediately. */
   function drawPreviewCanvas() {
-    if (scrubPreviewActive && previewTimeEl instanceof HTMLElement) {
-      const ct = previewVideo.currentTime;
-      if (Number.isFinite(ct)) previewTimeEl.textContent = formatTime(ct);
-    }
     const ctx = previewCanvas.getContext("2d");
     if (!previewVideo.videoWidth) return;
     ctx.imageSmoothingEnabled = true;
@@ -997,6 +998,7 @@
     if (!show) {
       previewDesiredTime = null;
       previewSeekInFlight = false;
+      previewSeekGen += 1;
       if (previewSeekRaf != null) {
         cancelAnimationFrame(previewSeekRaf);
         previewSeekRaf = null;
@@ -1189,8 +1191,9 @@
   }
 
   /**
-   * One seek at a time on the hidden preview element; fast scrubs update previewDesiredTime and
-   * drain after each seeked so the decoder is not flooded (smoother than overlapping seeks).
+   * One seek at a time on the hidden preview element (same idea as `stepByFrame`): fast hovers
+   * update `previewDesiredTime` and the pipeline drains after each `seeked` without overlapping
+   * `currentTime` assignments that confuse the decoder.
    */
   function attemptPreviewSeek() {
     if (!scrubPreviewActive || previewDesiredTime == null) return;
@@ -1207,6 +1210,7 @@
     }
 
     previewSeekInFlight = true;
+    previewSeekInFlightGen = (previewSeekGen += 1);
     try {
       previewVideo.currentTime = want;
     } catch (_) {
@@ -1218,6 +1222,7 @@
     const t = timeAtProgressClientX(clientX);
     if (t == null) return;
     lastScrubTime = t;
+    if (previewTimeEl instanceof HTMLElement) previewTimeEl.textContent = formatTime(t);
     positionScrubPreview(clientX);
     schedulePreviewSeek(t);
     /* Touch scrub uses document `touchmove` + preventDefault so the native range does not emit
@@ -1239,6 +1244,7 @@
     const clamped = Math.min(1, Math.max(0, ratio));
     const t = clamped * dur;
     lastScrubTime = t;
+    if (previewTimeEl instanceof HTMLElement) previewTimeEl.textContent = formatTime(t);
     const rect = progressWrap.getBoundingClientRect();
     lastPreviewClientX = rect.left + clamped * rect.width;
     layoutScrubPreviewAtRatio(clamped);
@@ -1254,12 +1260,14 @@
       previewSeekInFlight = false;
       return;
     }
+    const doneGen = previewSeekInFlightGen;
     previewSeekInFlight = false;
-    // Paused preview element: rVFC is unreliable; rAF runs after seek so the label matches the frame drawn.
+    // Same rhythm as frame-step UI: paint after seeked, then chain the next pending target on rAF.
     requestAnimationFrame(() => {
       if (!scrubPreviewActive) return;
-      drawPreviewCanvas();
+      if (doneGen === previewSeekGen) drawPreviewCanvas();
       requestAnimationFrame(() => {
+        if (!scrubPreviewActive) return;
         attemptPreviewSeek();
       });
     });
