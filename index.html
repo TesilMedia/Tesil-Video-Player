@@ -22,18 +22,12 @@
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         background: var(--bg);
         color: var(--text);
-        display: flex;
-        flex-direction: column;
       }
       .shell {
         max-width: 960px;
         width: 100%;
         margin: 0 auto;
         padding: 1rem 1.25rem 1.25rem;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
       }
       .top {
         flex-shrink: 0;
@@ -57,18 +51,15 @@
         text-decoration: underline;
       }
       .embed {
-        flex: 1;
-        min-height: 0;
         border-radius: var(--radius);
         overflow: hidden;
-        background: #000;
+        background: var(--bg);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
       }
       .embed iframe {
         display: block;
         width: 100%;
-        height: 100%;
-        min-height: min(100dvh - 7rem, 1200px);
+        height: min(calc(100dvh - 7rem), 1200px);
         border: 0;
       }
     </style>
