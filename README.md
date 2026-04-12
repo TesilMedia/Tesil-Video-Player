@@ -2,7 +2,7 @@
 
 A focused **video player** for **Windows (desktop)** and **the browser**: open files, paste URLs, scrub with a live preview, zoom and pan, frame-step, and keyboard-driven controls.
 
-[![Latest release](https://img.shields.io/github/v/release/becknerd/Tesil-Player?logo=github&label=Windows%20portable)](https://github.com/becknerd/Tesil-Player/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/TesilMedia/Tesil-Player?logo=github&label=Windows%20portable)](https://github.com/TesilMedia/Tesil-Player/releases/latest)
 
 ---
 
