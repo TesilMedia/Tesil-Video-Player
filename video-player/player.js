@@ -91,18 +91,131 @@
     }
   }
 
-  const programmaticVolumeAllowed = browserAllowsMediaElementVolumeControl();
+  /**
+   * iOS/iPadOS WebKit often reports successful `video.volume` writes while playback loudness
+   * still follows the hardware buttons — route volume through Web Audio instead.
+   */
+  function isIosStyleVolumeLockedPlatform() {
+    try {
+      const ua = navigator.userAgent || "";
+      if (/iPhone|iPod|iPad/i.test(ua)) return true;
+      if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return true;
+    } catch (_) {
+      /* ignore */
+    }
+    return false;
+  }
+
+  /** When true, drive loudness with `video.volume`; otherwise try Web Audio gain (see below). */
+  const elementVolumeControlsOutput =
+    browserAllowsMediaElementVolumeControl() && !isIosStyleVolumeLockedPlatform();
+
+  /** Lazily created when `elementVolumeControlsOutput` is false (typical: iPhone Safari). */
+  let webAudioVolumeRoute = false;
+  /** Cleared on `loadstart` so a new source can retry after a CORS/setup failure. */
+  let webAudioVolumeSetupFailed = false;
+  /** @type {AudioContext | null} */
+  let webAudioCtx = null;
+  /** @type {GainNode | null} */
+  let webAudioGain = null;
+
+  function webAudioVolumeConstructorAvailable() {
+    return (
+      typeof window.AudioContext === "function" ||
+      typeof window.webkitAudioContext === "function"
+    );
+  }
+
+  function ensureWebAudioGainRoute() {
+    if (elementVolumeControlsOutput) return false;
+    if (webAudioVolumeRoute && webAudioCtx && webAudioGain) {
+      void webAudioCtx.resume();
+      return true;
+    }
+    if (webAudioVolumeSetupFailed) return false;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (typeof AC !== "function") {
+      webAudioVolumeSetupFailed = true;
+      syncVolumeSliderLockedUI();
+      return false;
+    }
+    try {
+      const ctx = new AC();
+      const src = ctx.createMediaElementSource(video);
+      const gain = ctx.createGain();
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      webAudioCtx = ctx;
+      webAudioGain = gain;
+      webAudioVolumeRoute = true;
+      video.volume = 1;
+      gain.gain.value = Math.max(0, Math.min(1, Number(volumeSlider.value) || 0));
+      void ctx.resume();
+      return true;
+    } catch (_) {
+      webAudioVolumeSetupFailed = true;
+      syncVolumeSliderLockedUI();
+      return false;
+    }
+  }
+
+  function applyVolumeFromSlider() {
+    if (!(volumeSlider instanceof HTMLInputElement)) return;
+    const v = Math.max(0, Math.min(1, Number(volumeSlider.value)));
+    if (!Number.isFinite(v)) return;
+
+    if (elementVolumeControlsOutput) {
+      video.volume = v;
+      video.muted = v === 0;
+      return;
+    }
+
+    if (!ensureWebAudioGainRoute()) return;
+
+    video.volume = 1;
+    video.muted = v === 0;
+    if (!video.muted && webAudioGain && webAudioCtx) {
+      try {
+        webAudioGain.gain.setValueAtTime(v, webAudioCtx.currentTime);
+      } catch (_) {
+        webAudioGain.gain.value = v;
+      }
+    }
+    void webAudioCtx.resume();
+  }
+
+  function bumpVolumeKeyboard(delta) {
+    if (elementVolumeControlsOutput) {
+      if (delta > 0) video.muted = false;
+      video.volume = Math.min(1, Math.max(0, video.volume + delta));
+      video.muted = video.volume === 0;
+      volumeSlider.value = String(video.volume);
+      return;
+    }
+    if (!ensureWebAudioGainRoute()) return;
+    const cur = Math.max(0, Math.min(1, Number(volumeSlider.value)));
+    const next = Math.min(1, Math.max(0, cur + delta));
+    volumeSlider.value = String(next);
+    applyVolumeFromSlider();
+  }
 
   function syncVolumeSliderLockedUI() {
     if (!(volumeSlider instanceof HTMLInputElement)) return;
-    volumeSlider.disabled = !programmaticVolumeAllowed;
+    const enabled =
+      elementVolumeControlsOutput ||
+      (webAudioVolumeConstructorAvailable() && !webAudioVolumeSetupFailed);
+    volumeSlider.disabled = !enabled;
     volumeSlider.setAttribute(
       "aria-label",
-      programmaticVolumeAllowed
+      enabled
         ? "Volume"
-        : "Volume (use device buttons in this browser)"
+        : "Volume (not adjustable for this source in this browser)"
     );
   }
+
+  video.addEventListener("loadstart", () => {
+    webAudioVolumeSetupFailed = false;
+  });
 
   /** At 1× zoom, movement past this before pointerup cancels tap-to-play (scroll starting on the player). */
   const VIEWPORT_TAP_CANCEL_MOVE_PX = usesCoarsePrimaryPointer ? 30 : 12;
@@ -1270,6 +1383,7 @@
     setState(true);
     lastMediaTime = null;
     startFramePeriodMeasure();
+    if (webAudioVolumeRoute && webAudioCtx) void webAudioCtx.resume();
   });
 
   video.addEventListener("pause", () => {
@@ -1278,7 +1392,9 @@
   });
 
   video.addEventListener("volumechange", () => {
-    volumeSlider.value = String(video.volume);
+    if (!webAudioVolumeRoute) {
+      volumeSlider.value = String(video.volume);
+    }
     setMutedUI();
   });
 
@@ -1778,12 +1894,11 @@
   document.addEventListener("touchend", endTouchScrubIfLifted, true);
   document.addEventListener("touchcancel", endTouchScrubIfLifted, true);
 
-  volumeSlider.addEventListener("input", () => {
-    if (!programmaticVolumeAllowed) return;
-    const v = Number(volumeSlider.value);
-    video.volume = v;
-    video.muted = v === 0;
-  });
+  function onVolumeSliderInteraction() {
+    applyVolumeFromSlider();
+  }
+  volumeSlider.addEventListener("input", onVolumeSliderInteraction);
+  volumeSlider.addEventListener("change", onVolumeSliderInteraction);
 
   fileInput.addEventListener("change", () => {
     const file = fileInput.files && fileInput.files[0];
@@ -1830,9 +1945,23 @@
 
   muteBtn.addEventListener("click", () => {
     video.muted = !video.muted;
-    if (!video.muted && video.volume === 0 && programmaticVolumeAllowed) {
-      video.volume = 1;
-      volumeSlider.value = "1";
+    if (!video.muted) {
+      const sv = Number(volumeSlider.value);
+      if (sv === 0) {
+        volumeSlider.value = "1";
+        if (elementVolumeControlsOutput) {
+          video.volume = 1;
+        } else {
+          applyVolumeFromSlider();
+        }
+      } else if (webAudioVolumeRoute && webAudioGain && webAudioCtx) {
+        try {
+          webAudioGain.gain.setValueAtTime(sv, webAudioCtx.currentTime);
+        } catch (_) {
+          webAudioGain.gain.value = sv;
+        }
+        void webAudioCtx.resume();
+      }
     }
   });
 
@@ -2009,17 +2138,12 @@
         );
         break;
       case "ArrowUp":
-        if (!programmaticVolumeAllowed) break;
         e.preventDefault();
-        video.volume = Math.min(1, video.volume + 0.1);
-        video.muted = false;
-        volumeSlider.value = String(video.volume);
+        bumpVolumeKeyboard(0.1);
         break;
       case "ArrowDown":
-        if (!programmaticVolumeAllowed) break;
         e.preventDefault();
-        video.volume = Math.max(0, video.volume - 0.1);
-        volumeSlider.value = String(video.volume);
+        bumpVolumeKeyboard(-0.1);
         break;
       case "m":
       case "M":
