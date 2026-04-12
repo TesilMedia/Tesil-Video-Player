@@ -253,7 +253,7 @@
   /** At 1× zoom, movement past this before pointerup cancels tap-to-play (scroll starting on the player). */
   const VIEWPORT_TAP_CANCEL_MOVE_PX = usesCoarsePrimaryPointer ? 30 : 12;
   /** Coarse/touch: cancel tap-to-play if the finger stayed down longer than a quick tap (avoids long-press / slow drags). */
-  const VIEWPORT_TAP_MAX_DURATION_MS = usesCoarsePrimaryPointer ? 320 : Infinity;
+  const VIEWPORT_TAP_MAX_DURATION_MS = usesCoarsePrimaryPointer ? 300 : Infinity;
   /** Two-finger span must reach this (px) before pinch-zoom activates (avoids jitter when touches start close). */
   const PINCH_MIN_START_DIST_PX = 28;
   /** Clamp per-move scale ratio so a bad frame does not explode zoom. */
@@ -419,6 +419,8 @@
 
   /** Used until enough frames have been observed (no rVFC or never played). */
   const FALLBACK_FRAME_PERIOD = 1 / 30;
+  /** Hold-to-repeat only starts after this many ms so quick taps stay single-step. */
+  const FRAME_HOLD_REPEAT_DELAY_MS = 300;
 
   const DT_SAMPLE_CAP = 48;
   const MIN_FRAME_PERIOD = 1 / 120;
@@ -490,11 +492,96 @@
   let framePointerHeldForward = false;
   /** True after `pointerdown` on a frame step button until `click` skips or rAF clears (no duplicate step). */
   let lastFrameStepViaPointer = false;
+  /** After delay, hold chains another frame on comma/period or frame buttons (`FRAME_HOLD_REPEAT_DELAY_MS`). */
+  let frameKeyHoldRepeatReadyBack = false;
+  let frameKeyHoldRepeatReadyForward = false;
+  let framePointerHoldRepeatReadyBack = false;
+  let framePointerHoldRepeatReadyForward = false;
+  let frameKeyHoldTimerBack = null;
+  let frameKeyHoldTimerForward = null;
+  let framePointerHoldTimerBack = null;
+  let framePointerHoldTimerForward = null;
 
   function frameHeldForDirection(direction) {
     return direction < 0
       ? frameKeyHeldBack || framePointerHeldBack
       : frameKeyHeldForward || framePointerHeldForward;
+  }
+
+  function frameHoldRepeatsAfterDelayForDirection(direction) {
+    return direction < 0
+      ? (frameKeyHeldBack && frameKeyHoldRepeatReadyBack) ||
+          (framePointerHeldBack && framePointerHoldRepeatReadyBack)
+      : (frameKeyHeldForward && frameKeyHoldRepeatReadyForward) ||
+          (framePointerHeldForward && framePointerHoldRepeatReadyForward);
+  }
+
+  function disarmKeyboardFrameHoldRepeat(direction) {
+    if (direction === -1) {
+      if (frameKeyHoldTimerBack != null) {
+        clearTimeout(frameKeyHoldTimerBack);
+        frameKeyHoldTimerBack = null;
+      }
+      frameKeyHoldRepeatReadyBack = false;
+    } else {
+      if (frameKeyHoldTimerForward != null) {
+        clearTimeout(frameKeyHoldTimerForward);
+        frameKeyHoldTimerForward = null;
+      }
+      frameKeyHoldRepeatReadyForward = false;
+    }
+  }
+
+  function disarmPointerFrameHoldRepeat(direction) {
+    if (direction === -1) {
+      if (framePointerHoldTimerBack != null) {
+        clearTimeout(framePointerHoldTimerBack);
+        framePointerHoldTimerBack = null;
+      }
+      framePointerHoldRepeatReadyBack = false;
+    } else {
+      if (framePointerHoldTimerForward != null) {
+        clearTimeout(framePointerHoldTimerForward);
+        framePointerHoldTimerForward = null;
+      }
+      framePointerHoldRepeatReadyForward = false;
+    }
+  }
+
+  function armKeyboardFrameHoldRepeat(direction) {
+    disarmKeyboardFrameHoldRepeat(direction);
+    const tid = window.setTimeout(() => {
+      if (direction === -1) {
+        frameKeyHoldTimerBack = null;
+        if (!frameKeyHeldBack) return;
+        frameKeyHoldRepeatReadyBack = true;
+      } else {
+        frameKeyHoldTimerForward = null;
+        if (!frameKeyHeldForward) return;
+        frameKeyHoldRepeatReadyForward = true;
+      }
+      stepByFrame(direction);
+    }, FRAME_HOLD_REPEAT_DELAY_MS);
+    if (direction === -1) frameKeyHoldTimerBack = tid;
+    else frameKeyHoldTimerForward = tid;
+  }
+
+  function armPointerFrameHoldRepeat(direction) {
+    disarmPointerFrameHoldRepeat(direction);
+    const tid = window.setTimeout(() => {
+      if (direction === -1) {
+        framePointerHoldTimerBack = null;
+        if (!framePointerHeldBack) return;
+        framePointerHoldRepeatReadyBack = true;
+      } else {
+        framePointerHoldTimerForward = null;
+        if (!framePointerHeldForward) return;
+        framePointerHoldRepeatReadyForward = true;
+      }
+      stepByFrame(direction);
+    }, FRAME_HOLD_REPEAT_DELAY_MS);
+    if (direction === -1) framePointerHoldTimerBack = tid;
+    else framePointerHoldTimerForward = tid;
   }
 
   /** Suppresses stale `seeked` UI when a newer frame-step seek was started. */
@@ -529,10 +616,11 @@
         syncProgressFromVideo();
         updateTimeDisplay();
         if (!frameHeldForDirection(direction)) return;
+        if (!frameHoldRepeatsAfterDelayForDirection(direction)) return;
         // Paused video: `requestVideoFrameCallback` often never fires, so holds would stop after
         // one frame. `requestAnimationFrame` runs after the seeked paint path on the main thread.
         requestAnimationFrame(() => {
-          if (!frameHeldForDirection(direction)) return;
+          if (!frameHoldRepeatsAfterDelayForDirection(direction)) return;
           stepByFrame(direction);
         });
       },
@@ -550,6 +638,7 @@
   }
 
   function clearFrameKeyboardHoldDirection(direction) {
+    disarmKeyboardFrameHoldRepeat(direction);
     if (direction === -1) frameKeyHeldBack = false;
     else frameKeyHeldForward = false;
   }
@@ -560,6 +649,10 @@
     framePointerHeldBack = false;
     framePointerHeldForward = false;
     lastFrameStepViaPointer = false;
+    disarmKeyboardFrameHoldRepeat(-1);
+    disarmKeyboardFrameHoldRepeat(1);
+    disarmPointerFrameHoldRepeat(-1);
+    disarmPointerFrameHoldRepeat(1);
   }
 
   function revokeBlobUrl() {
@@ -1383,8 +1476,14 @@
         /* ignore */
       }
       lastFrameStepViaPointer = true;
-      if (direction < 0) framePointerHeldBack = true;
-      else framePointerHeldForward = true;
+      if (direction < 0) {
+        framePointerHeldBack = true;
+        framePointerHoldRepeatReadyBack = false;
+      } else {
+        framePointerHeldForward = true;
+        framePointerHoldRepeatReadyForward = false;
+      }
+      armPointerFrameHoldRepeat(direction);
       stepByFrame(direction);
     });
     btn.addEventListener("click", (e) => {
@@ -1395,6 +1494,7 @@
       stepByFrame(direction);
     });
     btn.addEventListener("lostpointercapture", () => {
+      disarmPointerFrameHoldRepeat(direction);
       if (direction < 0) framePointerHeldBack = false;
       else framePointerHeldForward = false;
       bumpChromeActivity();
@@ -1408,6 +1508,8 @@
     "pointerup",
     (e) => {
       if (e.button !== 0) return;
+      disarmPointerFrameHoldRepeat(-1);
+      disarmPointerFrameHoldRepeat(1);
       framePointerHeldBack = false;
       framePointerHeldForward = false;
       requestAnimationFrame(() => {
@@ -2202,8 +2304,14 @@
     if (frameDir != null) {
       e.preventDefault();
       if (e.repeat) return;
-      if (frameDir === -1) frameKeyHeldBack = true;
-      else frameKeyHeldForward = true;
+      if (frameDir === -1) {
+        frameKeyHeldBack = true;
+        frameKeyHoldRepeatReadyBack = false;
+      } else {
+        frameKeyHeldForward = true;
+        frameKeyHoldRepeatReadyForward = false;
+      }
+      armKeyboardFrameHoldRepeat(frameDir);
       stepByFrame(frameDir);
       return;
     }
