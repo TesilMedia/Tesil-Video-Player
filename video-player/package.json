@@ -12,7 +12,7 @@
   "main": "electron-main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win zip --x64"
+    "dist": "electron-builder --win dir --x64"
   },
   "devDependencies": {
     "electron": "28.3.3",
@@ -22,7 +22,6 @@
     "appId": "com.tesil.mediaplayer",
     "productName": "Tesil Media Player",
     "copyright": "Copyright 2026",
-    "artifactName": "Tesil-Media-Player-${version}-Windows-portable.${ext}",
     "npmRebuild": false,
     "publish": "never",
     "directories": {
@@ -32,7 +31,7 @@
       "signAndEditExecutable": false,
       "target": [
         {
-          "target": "zip",
+          "target": "dir",
           "arch": ["x64"]
         }
       ]

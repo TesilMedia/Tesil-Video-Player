@@ -1,4 +1,4 @@
-# electron-builder --win zip → portable .zip (extract anywhere, run the .exe inside).
+# Unpacked Windows build (electron-builder dir), then zip that folder for GitHub Releases.
 
 name: Windows release
 
@@ -24,43 +24,38 @@ jobs:
       - name: Build portable Windows .zip
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          ELECTRON_BUILDER_CACHE: C:\eb
         shell: pwsh
+        working-directory: video-player
         run: |
-          $src = Join-Path $env:GITHUB_WORKSPACE "video-player"
-          $b = "C:\vp"
-          foreach ($p in @($b, $env:ELECTRON_BUILDER_CACHE)) {
-            if (Test-Path $p) { Remove-Item $p -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path $p | Out-Null
-          }
-
-          robocopy $src $b /E /XD node_modules dist /NFL /NDL /NJH /NJS /NP | Out-Host
-          if ($LASTEXITCODE -ge 8) { throw "robocopy failed: exit code $LASTEXITCODE" }
-
-          Set-Location $b
           npm install --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { throw "npm install failed: exit code $LASTEXITCODE" }
 
-          cmd /c "npm run dist > build.log 2>&1"
-          if ($LASTEXITCODE -ne 0) {
-            Copy-Item build.log (Join-Path $src "build.log") -Force -ErrorAction SilentlyContinue
-            Get-Content build.log -Tail 200 | ForEach-Object { Write-Host $_ }
-            throw "electron-builder failed: exit code $LASTEXITCODE"
+          npm run dist
+          if ($LASTEXITCODE -ne 0) { throw "electron-builder failed: exit code $LASTEXITCODE" }
+
+          $unpacked = Join-Path "dist" "win-unpacked"
+          if (-not (Test-Path $unpacked)) {
+            Write-Host "Contents of dist/:"
+            if (Test-Path "dist") { Get-ChildItem "dist" -Force | ForEach-Object { Write-Host $_.Name } }
+            throw "dist/win-unpacked not found"
           }
 
-          $distRoot = Join-Path $b "dist"
-          $zip = Get-ChildItem -Path $distRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-          if (-not $zip) {
-            Get-ChildItem $distRoot -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Name }
-            throw "No .zip output under dist/"
-          }
-          Write-Host "Built $($zip.FullName) size=$((Get-Item $zip.FullName).Length)"
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $product = $pkg.build.productName
+          $ver = $pkg.version
+          $zipName = "Tesil-Media-Player-$ver-Windows-portable.zip"
+          $zipPath = Join-Path (Join-Path (Get-Location).Path "dist") $zipName
 
-          $distDest = Join-Path $src "dist"
-          New-Item -ItemType Directory -Force -Path $distDest | Out-Null
-          Copy-Item $zip.FullName $distDest -Force
+          $stage = Join-Path $env:RUNNER_TEMP "tesil-portable"
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          $inner = Join-Path $stage $product
+          New-Item -ItemType Directory -Path $inner -Force | Out-Null
+          Copy-Item (Join-Path $unpacked '*') -Destination $inner -Recurse -Force
+
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Compress-Archive -LiteralPath $inner -DestinationPath $zipPath -CompressionLevel Optimal
+          Write-Host "Created $zipPath size=$((Get-Item $zipPath).Length)"
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
@@ -82,6 +77,8 @@ jobs:
       - name: Logs on failure
         if: failure()
         shell: pwsh
+        working-directory: video-player
         run: |
-          $p = Join-Path $env:GITHUB_WORKSPACE "video-player/build.log"
-          if (Test-Path $p) { Get-Content $p -Tail 200 }
+          Write-Host "--- dist (top level) ---"
+          if (Test-Path dist) { Get-ChildItem dist -Force | ForEach-Object { Write-Host $_.Name } }
+          else { Write-Host "(no dist folder)" }
