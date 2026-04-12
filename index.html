@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1114" />
+    <title>Tesil Media Player</title>
+    <style>
+      :root {
+        --bg: #0f1114;
+        --text: #e8eaed;
+        --muted: #9aa0a6;
+        --accent: #8ab4f8;
+        --radius: 10px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        display: flex;
+        flex-direction: column;
+      }
+      .shell {
+        max-width: 960px;
+        width: 100%;
+        margin: 0 auto;
+        padding: 1rem 1.25rem 1.25rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .top {
+        flex-shrink: 0;
+        margin-bottom: 0.75rem;
+      }
+      .top p {
+        margin: 0;
+        font-size: 0.9rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .top strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .top a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .top a:hover {
+        text-decoration: underline;
+      }
+      .embed {
+        flex: 1;
+        min-height: 0;
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: #000;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      }
+      .embed iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        min-height: min(100dvh - 7rem, 1200px);
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <p>
+          <strong>Tesil Media Player</strong> — embedded below. You can also
+          <a href="video-player/" target="_blank" rel="noopener">open it in a new tab</a>
+          or grab the
+          <a
+            href="https://github.com/becknerd/Tesil-Player/releases/latest"
+            target="_blank"
+            rel="noopener"
+            >Windows build</a
+          >.
+        </p>
+      </header>
+      <div class="embed">
+        <iframe
+          title="Tesil Media Player"
+          src="video-player/"
+          loading="lazy"
+          allow="fullscreen"
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      </div>
+    </div>
+  </body>
+</html>
