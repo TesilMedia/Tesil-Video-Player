@@ -1007,7 +1007,7 @@ body::-webkit-scrollbar {
 }
 
 /* Touch / iPhone: comfortable form targets + 16px URL (avoids iOS focus-zoom).
-   Player chrome keeps default `.player` cqw scaling so HUD / scrub overlays stay compact. */
+   In-player pills use a tighter cqw curve than default — wide phones were ~35–40px tall. */
 @media (pointer: coarse) {
   .upload-row__btn,
   .url-row__btn {
@@ -1019,6 +1019,37 @@ body::-webkit-scrollbar {
     min-height: 44px;
     font-size: 1rem;
     padding: 0.55rem 0.75rem;
+  }
+
+  .player {
+    --chrome-control-height: clamp(1.35rem, 0.04rem + 4.8cqw, 1.85rem);
+    --chrome-font-size: clamp(0.75rem, 0.034rem + 2.1cqw, 0.8125rem);
+    --chrome-gap: clamp(0.08rem, 0.003rem + 0.9cqw, 0.28rem);
+    --vol-rail-expanded: min(8.5rem, max(2.4rem, 19cqw));
+  }
+
+  .player .icon-play {
+    font-size: clamp(8px, 0.13rem + 1.45cqw, 12px);
+  }
+
+  .player .icon-volume {
+    width: clamp(10px, 0.26rem + 1.65cqw, 15px);
+    height: clamp(10px, 0.26rem + 1.65cqw, 15px);
+  }
+
+  .player .icon-fs__svg {
+    width: clamp(9px, 0.15rem + 1.45cqw, 12px);
+    height: clamp(9px, 0.15rem + 1.45cqw, 12px);
+  }
+
+  .player .icon-frame-arrow {
+    width: clamp(7px, 0.13rem + 1.25cqw, 10px);
+    height: clamp(7px, 0.13rem + 1.25cqw, 10px);
+  }
+
+  .player .player__btn--frame {
+    width: clamp(0.82rem, 0.38rem + 1.75cqw, 1.3rem);
+    min-width: clamp(0.82rem, 0.38rem + 1.75cqw, 1.3rem);
   }
 
   /* Zoom only via two-finger pinch on touch; +/- / wheel / keys are disabled in JS. */
