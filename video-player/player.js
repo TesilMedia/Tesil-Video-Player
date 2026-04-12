@@ -419,6 +419,9 @@
   /** True while the OS launch queue is still delivering file handle(s). */
   let pendingOsFileOpen = false;
 
+  /** True when any pointer is inside `#player` (mouse hover / finger over player). */
+  let pointerInsidePlayer = false;
+
   if ("launchQueue" in window && typeof window.launchQueue.setConsumer === "function") {
     window.launchQueue.setConsumer(async (launchParams) => {
       pendingOsFileOpen = true;
@@ -1156,6 +1159,7 @@
 
   player.addEventListener("pointermove", bumpChromeActivity);
   player.addEventListener("pointerenter", () => {
+    pointerInsidePlayer = true;
     player.classList.remove("player--pointer-outside");
     bumpChromeActivity();
   });
@@ -1191,7 +1195,6 @@
     },
     true
   );
-  player.addEventListener("keydown", bumpChromeActivity, true);
   player.addEventListener("wheel", bumpChromeActivity, { passive: true });
   player.addEventListener("focusin", (e) => {
     if (!(e.target instanceof Node)) return;
@@ -1205,6 +1208,7 @@
 
   /** Touch/stylus leave the window as “mouse” moves; only treat real mouse/pen leave as “outside”. */
   player.addEventListener("pointerleave", (e) => {
+    pointerInsidePlayer = false;
     if (e.pointerType === "touch") return;
     clearChromeIdleTimer();
     exitChromeIdle();
@@ -1446,8 +1450,45 @@
     }
   });
 
-  player.addEventListener("keydown", (e) => {
-    if (e.target !== player && !player.contains(e.target)) return;
+  function isEditableFocusOutsidePlayer() {
+    const ae = document.activeElement;
+    if (!(ae instanceof HTMLElement)) return false;
+    if (player.contains(ae)) return false;
+    if (ae.isContentEditable) return true;
+    const tag = ae.tagName;
+    if (tag === "TEXTAREA") return true;
+    if (tag === "SELECT") return true;
+    if (tag === "INPUT") {
+      const type = (ae.type || "text").toLowerCase();
+      if (
+        type === "button" ||
+        type === "checkbox" ||
+        type === "radio" ||
+        type === "file" ||
+        type === "range" ||
+        type === "color" ||
+        type === "submit" ||
+        type === "reset" ||
+        type === "hidden"
+      ) {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function shouldHandlePlayerKeyboard(e) {
+    const t = e.target;
+    if (t === player || (t instanceof Node && player.contains(t))) return true;
+    if (!pointerInsidePlayer) return false;
+    if (isEditableFocusOutsidePlayer()) return false;
+    return true;
+  }
+
+  function onPlayerKeydown(e) {
+    if (!shouldHandlePlayerKeyboard(e)) return;
+    bumpChromeActivity();
     if (e.code === "BracketLeft") {
       e.preventDefault();
       if (!e.repeat) nudgePlaybackRate(-1);
@@ -1522,18 +1563,24 @@
       default:
         break;
     }
-  });
+  }
 
-  player.addEventListener("keyup", (e) => {
-    if (e.target !== player && !player.contains(e.target)) return;
+  function onPlayerKeyup(e) {
+    if (!shouldHandlePlayerKeyboard(e)) return;
     const frameDir = frameStepDirectionFromKeyEvent(e);
     if (frameDir != null) {
       clearFrameKeyboardHoldDirection(frameDir);
       bumpChromeActivity();
     }
-  });
+  }
 
-  window.addEventListener("blur", clearAllFrameHold);
+  document.addEventListener("keydown", onPlayerKeydown, true);
+  document.addEventListener("keyup", onPlayerKeyup, true);
+
+  window.addEventListener("blur", () => {
+    clearAllFrameHold();
+    pointerInsidePlayer = false;
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") clearAllFrameHold();
   });
