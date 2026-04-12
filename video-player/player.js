@@ -1823,33 +1823,18 @@
       return;
     }
 
-    /* Touch: prefer standard video element fullscreen (Android + recent iOS), then WebKit native. */
-    if (!isExternalEmbedSource() && usesCoarsePrimaryPointer) {
-      try {
-        if (typeof video.requestFullscreen === "function") {
-          await video.requestFullscreen();
-          return;
-        }
-      } catch (_) {
-        /* not allowed */
-      }
-      try {
-        if (typeof video.webkitEnterFullscreen === "function") {
-          video.webkitEnterFullscreen();
-          return;
-        }
-      } catch (_) {
-        /* not allowed */
-      }
-    }
-
+    /*
+     * Native <video>: try wrapper first (works on desktop over plain http when the API allows it),
+     * then <video> element fullscreen, then WebKit video-only (typical iPhone).
+     * Do not branch on coarse pointer alone — that skipped the player on touch and broke http.
+     */
     try {
       if (typeof player.requestFullscreen === "function") {
         await player.requestFullscreen();
         return;
       }
     } catch (_) {
-      /* iOS Safari often rejects element fullscreen */
+      /* not allowed */
     }
     try {
       if (typeof player.webkitRequestFullscreen === "function") {
@@ -1859,7 +1844,15 @@
     } catch (_) {
       /* not allowed */
     }
-    if (!isExternalEmbedSource() && typeof video.webkitEnterFullscreen === "function") {
+    try {
+      if (typeof video.requestFullscreen === "function") {
+        await video.requestFullscreen();
+        return;
+      }
+    } catch (_) {
+      /* not allowed */
+    }
+    if (typeof video.webkitEnterFullscreen === "function") {
       try {
         video.webkitEnterFullscreen();
       } catch (_) {
