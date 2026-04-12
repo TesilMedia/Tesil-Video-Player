@@ -180,6 +180,7 @@
     if (!(zoomGroup instanceof HTMLElement) || !(ratePill instanceof HTMLElement)) return;
     const w = zoomGroup.offsetWidth;
     if (w > 0) ratePill.style.width = `${w}px`;
+    else ratePill.style.removeProperty("width");
   }
 
   function applyZoomTransform() {
@@ -1537,6 +1538,7 @@
     "wheel",
     (e) => {
       if (isExternalEmbedSource()) return;
+      if (usesCoarsePrimaryPointer) return;
       const pr = player.getBoundingClientRect();
       if (
         e.clientX < pr.left ||
@@ -1552,9 +1554,18 @@
     { passive: false }
   );
 
-  zoomInBtn.addEventListener("click", () => adjustZoomByStep(1));
-  zoomOutBtn.addEventListener("click", () => adjustZoomByStep(-1));
-  zoomResetBtn.addEventListener("click", () => setZoomLevel(1));
+  zoomInBtn.addEventListener("click", () => {
+    if (usesCoarsePrimaryPointer) return;
+    adjustZoomByStep(1);
+  });
+  zoomOutBtn.addEventListener("click", () => {
+    if (usesCoarsePrimaryPointer) return;
+    adjustZoomByStep(-1);
+  });
+  zoomResetBtn.addEventListener("click", () => {
+    if (usesCoarsePrimaryPointer) return;
+    setZoomLevel(1);
+  });
 
   new ResizeObserver(() => {
     clampPan();
@@ -1809,29 +1820,56 @@
       return;
     }
 
-    const tryWebKitVideo =
-      !isExternalEmbedSource() && typeof video.webkitEnterFullscreen === "function";
-
-    if (document.fullscreenEnabled !== false) {
+    if (isExternalEmbedSource()) {
       try {
         if (typeof player.requestFullscreen === "function") {
           await player.requestFullscreen();
-          return;
-        }
-      } catch (_) {
-        /* iOS Safari often rejects element fullscreen */
-      }
-      try {
-        if (typeof player.webkitRequestFullscreen === "function") {
+        } else if (typeof player.webkitRequestFullscreen === "function") {
           await player.webkitRequestFullscreen();
-          return;
         }
       } catch (_) {
         /* not allowed */
       }
+      return;
     }
 
-    if (tryWebKitVideo) {
+    /* Touch-first: iOS ignores or breaks fullscreen on a wrapper div; use the video element. */
+    if (usesCoarsePrimaryPointer) {
+      if (typeof video.webkitEnterFullscreen === "function") {
+        try {
+          video.webkitEnterFullscreen();
+          return;
+        } catch (_) {
+          /* not allowed */
+        }
+      }
+      if (typeof video.requestFullscreen === "function") {
+        try {
+          await video.requestFullscreen();
+          return;
+        } catch (_) {
+          /* not allowed */
+        }
+      }
+    }
+
+    try {
+      if (typeof player.requestFullscreen === "function") {
+        await player.requestFullscreen();
+        return;
+      }
+    } catch (_) {
+      /* iOS Safari often rejects element fullscreen */
+    }
+    try {
+      if (typeof player.webkitRequestFullscreen === "function") {
+        await player.webkitRequestFullscreen();
+        return;
+      }
+    } catch (_) {
+      /* not allowed */
+    }
+    if (typeof video.webkitEnterFullscreen === "function") {
       try {
         video.webkitEnterFullscreen();
       } catch (_) {
@@ -1939,15 +1977,18 @@
         break;
       case "+":
       case "=":
+        if (usesCoarsePrimaryPointer) break;
         e.preventDefault();
         if (!e.repeat) adjustZoomByStep(1);
         break;
       case "-":
       case "_":
+        if (usesCoarsePrimaryPointer) break;
         e.preventDefault();
         if (!e.repeat) adjustZoomByStep(-1);
         break;
       case "0":
+        if (usesCoarsePrimaryPointer) break;
         e.preventDefault();
         if (!e.repeat) setZoomLevel(1);
         break;

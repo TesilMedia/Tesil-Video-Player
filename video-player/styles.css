@@ -1040,6 +1040,11 @@ body::-webkit-scrollbar {
     --vol-track-h: clamp(10px, 0.32rem + 1.5cqw, 14px);
   }
 
+  /* Zoom only via two-finger pinch on touch; +/- / wheel / keys are disabled in JS. */
+  .player__zoom-group {
+    display: none !important;
+  }
+
   .tooltip-layer {
     max-width: min(20em, calc(100vw - max(16px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
   }
