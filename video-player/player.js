@@ -1220,6 +1220,17 @@
     lastScrubTime = t;
     positionScrubPreview(clientX);
     schedulePreviewSeek(t);
+    /* Touch scrub uses document `touchmove` + preventDefault so the native range does not emit
+       `input`; keep the thumb and main video in sync with the pointer. */
+    if (player.dataset.scrubbing === "true") {
+      const dur = video.duration;
+      if (Number.isFinite(dur) && dur > 0) {
+        const ratio = Math.min(1, Math.max(0, t / dur));
+        progress.value = String(Math.round(ratio * 1000));
+        video.currentTime = t;
+        updateTimeDisplay();
+      }
+    }
   }
 
   function updateScrubPreviewFromRatio(ratio) {
