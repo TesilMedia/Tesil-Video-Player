@@ -193,13 +193,13 @@
     if (!ensureWebAudioGainRoute()) return;
 
     video.volume = 1;
-    /* Level is gain only; `video.muted` stays for the mute button (avoids bogus touch `input`). */
-    video.muted = false;
+    /* Output level is gain; keep `video.muted` for the mute control (WebKit often ignores muted on this route). */
     if (webAudioGain && webAudioCtx) {
+      const out = video.muted ? 0 : v;
       try {
-        webAudioGain.gain.setValueAtTime(v, webAudioCtx.currentTime);
+        webAudioGain.gain.setValueAtTime(out, webAudioCtx.currentTime);
       } catch (_) {
-        webAudioGain.gain.value = v;
+        webAudioGain.gain.value = out;
       }
     }
     void webAudioCtx.resume();
@@ -215,6 +215,7 @@
       return;
     }
     if (!ensureWebAudioGainRoute()) return;
+    if (delta > 0) video.muted = false;
     const cur = Math.max(0, Math.min(1, Number(volumeSlider.value)));
     const next = Math.min(1, Math.max(0, cur + delta));
     volumeSlider.value = String(next);
@@ -1987,7 +1988,28 @@
 
   muteBtn.addEventListener("click", () => {
     video.muted = !video.muted;
-    if (!video.muted) {
+    if (webAudioVolumeRoute && webAudioGain && webAudioCtx) {
+      if (video.muted) {
+        try {
+          webAudioGain.gain.setValueAtTime(0, webAudioCtx.currentTime);
+        } catch (_) {
+          webAudioGain.gain.value = 0;
+        }
+      } else {
+        let sv = Number(volumeSlider.value);
+        if (sv === 0 || !Number.isFinite(sv)) {
+          volumeSlider.value = "1";
+          sv = 1;
+        }
+        sv = Math.max(0, Math.min(1, sv));
+        try {
+          webAudioGain.gain.setValueAtTime(sv, webAudioCtx.currentTime);
+        } catch (_) {
+          webAudioGain.gain.value = sv;
+        }
+      }
+      void webAudioCtx.resume();
+    } else if (!video.muted) {
       const sv = Number(volumeSlider.value);
       if (sv === 0) {
         volumeSlider.value = "1";
@@ -1996,15 +2018,9 @@
         } else {
           applyVolumeFromSlider();
         }
-      } else if (webAudioVolumeRoute && webAudioGain && webAudioCtx) {
-        try {
-          webAudioGain.gain.setValueAtTime(sv, webAudioCtx.currentTime);
-        } catch (_) {
-          webAudioGain.gain.value = sv;
-        }
-        void webAudioCtx.resume();
       }
     }
+    setMutedUI();
   });
 
   function syncPipVisibility() {
