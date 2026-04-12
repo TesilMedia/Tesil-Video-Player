@@ -32,6 +32,9 @@
   const chromeEl = player.querySelector(".player__chrome");
   const cornerTools = player.querySelector(".player__corner-tools");
   const cornerVolume = player.querySelector(".player__corner-volume");
+  const ytMount = document.getElementById("ytMount");
+  const urlInput = document.getElementById("urlInput");
+  const loadUrlBtn = document.getElementById("loadUrlBtn");
 
   const PREVIEW_W = 160;
   const PREVIEW_H = 90;
@@ -39,6 +42,8 @@
   let blobUrl = null;
   /** True after a user-chosen file, OS file launch, or drop (not the built-in sample). */
   let hasCustomSource = false;
+  /** `youtube` uses YouTube's embed only; custom player chrome is hidden. */
+  let sourceKind = "native";
 
   const DEMO_SAMPLE_URL =
     "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
@@ -312,6 +317,7 @@
   let frameStepGen = 0;
 
   function stepByFrame(direction) {
+    if (sourceKind === "youtube") return;
     if (!video.paused) video.pause();
     const dur = video.duration;
     if (!Number.isFinite(dur) || dur <= 0) return;
@@ -381,6 +387,163 @@
     }
   }
 
+  function exitYoutubeMode() {
+    sourceKind = "native";
+    player.dataset.source = "native";
+    player.classList.remove("player--youtube-only");
+    if (ytMount instanceof HTMLElement) {
+      ytMount.innerHTML = "";
+      ytMount.hidden = true;
+    }
+    video.hidden = false;
+  }
+
+  function parseYouTubeVideoId(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return null;
+    const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    let url;
+    try {
+      url = new URL(withScheme);
+    } catch (_) {
+      return null;
+    }
+    const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host === "youtu.be") {
+      const id = url.pathname.replace(/^\//, "").split("/")[0];
+      return /^[\w-]{11}$/.test(id) ? id : null;
+    }
+    if (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+      if (url.pathname === "/watch" || url.pathname.startsWith("/watch")) {
+        const v = url.searchParams.get("v");
+        return v && /^[\w-]{11}$/.test(v) ? v : null;
+      }
+      const embed = url.pathname.match(/^\/embed\/([\w-]{11})/);
+      if (embed) return embed[1];
+      const shorts = url.pathname.match(/^\/shorts\/([\w-]{11})/);
+      if (shorts) return shorts[1];
+      const live = url.pathname.match(/^\/live\/([\w-]{11})/);
+      if (live) return live[1];
+    }
+    if (host === "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")) {
+      const embedNc = url.pathname.match(/^\/embed\/([\w-]{11})/);
+      if (embedNc) return embedNc[1];
+    }
+    return null;
+  }
+
+  function isLikelyDirectVideoUrl(urlStr) {
+    try {
+      const u = new URL(urlStr);
+      if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function loadYouTubeFromId(videoId, displayLabel) {
+    hasCustomSource = true;
+    revokeBlobUrl();
+    exitYoutubeMode();
+    sourceKind = "youtube";
+    player.dataset.source = "youtube";
+    player.classList.add("player--youtube-only");
+    try {
+      setZoomLevel(1);
+    } catch (_) {
+      /* setZoomLevel not ready in edge load orders */
+    }
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    syncPreviewVideoSrc();
+    hideScrubPreview();
+    video.hidden = true;
+    if (!(ytMount instanceof HTMLElement)) return;
+    ytMount.hidden = false;
+    ytMount.innerHTML = "";
+    const params = new URLSearchParams({
+      rel: "0",
+      modestbranding: "1",
+      playsinline: "1",
+    });
+    const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
+      videoId
+    )}?${params}`;
+    const ifr = document.createElement("iframe");
+    ifr.className = "player__youtube-iframe";
+    ifr.src = src;
+    ifr.title = "YouTube video";
+    ifr.setAttribute("allowfullscreen", "");
+    ifr.setAttribute(
+      "allow",
+      "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    );
+    ifr.referrerPolicy = "strict-origin-when-cross-origin";
+    ytMount.appendChild(ifr);
+    if (fileNameEl instanceof HTMLElement) {
+      fileNameEl.textContent = displayLabel || "YouTube";
+    }
+    clearAllFrameHold();
+  }
+
+  function loadVideoFromHttpUrl(urlStr) {
+    if (!isLikelyDirectVideoUrl(urlStr)) {
+      if (fileNameEl instanceof HTMLElement) {
+        fileNameEl.textContent = "Enter a valid http(s) video URL.";
+      }
+      return;
+    }
+    hasCustomSource = true;
+    exitYoutubeMode();
+    revokeBlobUrl();
+    video.hidden = false;
+    player.dataset.source = "native";
+    if (pipBtn instanceof HTMLElement && document.pictureInPictureEnabled) {
+      pipBtn.hidden = false;
+    }
+    video.src = urlStr;
+    try {
+      const host = new URL(urlStr).hostname;
+      if (fileNameEl instanceof HTMLElement) fileNameEl.textContent = host || urlStr;
+    } catch (_) {
+      if (fileNameEl instanceof HTMLElement) fileNameEl.textContent = urlStr;
+    }
+    const onErr = () => {
+      video.removeEventListener("error", onErr);
+      hasCustomSource = false;
+      if (fileNameEl instanceof HTMLElement) {
+        fileNameEl.textContent =
+          "Could not play this URL. Try a direct MP4/WebM link, or use a YouTube link.";
+      }
+    };
+    video.addEventListener("error", onErr, { once: true });
+    video.load();
+    syncPreviewVideoSrc();
+    video.playbackRate = 1;
+    playbackRateSelect.value = "1";
+    video.play().catch(() => {});
+  }
+
+  function tryLoadFromUrlString(raw) {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) return;
+    const ytId = parseYouTubeVideoId(trimmed);
+    if (ytId) {
+      loadYouTubeFromId(ytId, `YouTube · ${ytId}`);
+      return;
+    }
+    if (!isLikelyDirectVideoUrl(trimmed)) {
+      if (fileNameEl instanceof HTMLElement) {
+        fileNameEl.textContent =
+          "Unsupported URL. Use a YouTube link or a direct link to a video file (MP4, WebM, …).";
+      }
+      return;
+    }
+    loadVideoFromHttpUrl(trimmed);
+  }
+
   function isVideoFile(file) {
     if (!(file instanceof File)) return false;
     if (file.type && file.type.startsWith("video/")) return true;
@@ -390,6 +553,7 @@
   function loadVideoFromFile(file) {
     if (!isVideoFile(file)) return;
     hasCustomSource = true;
+    exitYoutubeMode();
     revokeBlobUrl();
     blobUrl = URL.createObjectURL(file);
     video.src = blobUrl;
@@ -404,6 +568,7 @@
   function loadVideoFromNativePayload(payload) {
     if (!payload || !payload.url) return;
     hasCustomSource = true;
+    exitYoutubeMode();
     revokeBlobUrl();
     video.src = payload.url;
     if (fileNameEl instanceof HTMLElement) {
@@ -458,6 +623,7 @@
   }
 
   function applyDemoSampleIfNeeded() {
+    if (sourceKind === "youtube") return;
     if (hasCustomSource || pendingOsFileOpen || pendingNativeInitial || blobUrl) return;
     if (video.currentSrc) return;
     video.src = DEMO_SAMPLE_URL;
@@ -554,7 +720,12 @@
   }
 
   function syncScrubPreviewToPointer(clientX, clientY) {
-    const durOk = Number.isFinite(video.duration) && video.duration > 0;
+    if (sourceKind === "youtube") {
+      if (scrubPreviewActive) hideScrubPreview();
+      return;
+    }
+    const dur = video.duration;
+    const durOk = Number.isFinite(dur) && dur > 0;
     const scrubbing = player.dataset.scrubbing === "true";
     if (!durOk) {
       if (scrubPreviewActive && !scrubbing) hideScrubPreview();
@@ -787,11 +958,12 @@
   }
 
   function syncProgressFromVideo() {
-    if (!video.duration || !Number.isFinite(video.duration)) {
+    const dur = video.duration;
+    if (!dur || !Number.isFinite(dur)) {
       progress.value = 0;
       return;
     }
-    const ratio = video.currentTime / video.duration;
+    const ratio = video.currentTime / dur;
     progress.value = String(Math.round(ratio * 1000));
   }
 
@@ -982,6 +1154,7 @@
 
   videoViewport.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
+    if (sourceKind === "youtube") return;
     viewportPointers.set(e.pointerId, {
       clientX: e.clientX,
       clientY: e.clientY,
@@ -1218,6 +1391,7 @@
   player.addEventListener(
     "wheel",
     (e) => {
+      if (sourceKind === "youtube") return;
       const pr = player.getBoundingClientRect();
       if (
         e.clientX < pr.left ||
@@ -1292,9 +1466,10 @@
   });
 
   progress.addEventListener("input", () => {
-    if (!video.duration || !Number.isFinite(video.duration)) return;
+    const dur = video.duration;
+    if (!dur || !Number.isFinite(dur)) return;
     video.pause();
-    const t = (Number(progress.value) / 1000) * video.duration;
+    const t = (Number(progress.value) / 1000) * dur;
     video.currentTime = t;
     updateTimeDisplay();
     if (scrubPreviewActive || player.dataset.scrubbing === "true") {
@@ -1409,9 +1584,33 @@
   window.addEventListener("drop", (e) => {
     e.preventDefault();
     const dt = e.dataTransfer;
-    if (!dt || !dt.files || !dt.files.length) return;
-    loadVideoFromFile(dt.files[0]);
+    if (!dt) return;
+    if (dt.files && dt.files.length) {
+      loadVideoFromFile(dt.files[0]);
+      return;
+    }
+    const uriList = dt.getData("text/uri-list");
+    const plain = dt.getData("text/plain");
+    const uri = (uriList && uriList.split("\n")[0].trim()) || (plain && plain.trim());
+    if (uri) tryLoadFromUrlString(uri);
   });
+
+  function submitUrlField() {
+    if (!(urlInput instanceof HTMLInputElement)) return;
+    tryLoadFromUrlString(urlInput.value);
+  }
+
+  if (loadUrlBtn instanceof HTMLElement) {
+    loadUrlBtn.addEventListener("click", submitUrlField);
+  }
+  if (urlInput instanceof HTMLInputElement) {
+    urlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitUrlField();
+      }
+    });
+  }
 
   muteBtn.addEventListener("click", () => {
     video.muted = !video.muted;
@@ -1479,6 +1678,7 @@
   }
 
   function shouldHandlePlayerKeyboard(e) {
+    if (sourceKind === "youtube") return false;
     const t = e.target;
     if (t === player || (t instanceof Node && player.contains(t))) return true;
     if (!pointerInsidePlayer) return false;
@@ -1717,6 +1917,7 @@
       tooltipLayer.textContent = "";
     }
     if (!e.persisted) {
+      exitYoutubeMode();
       revokeBlobUrl();
       hasCustomSource = false;
     }
@@ -1744,9 +1945,6 @@
   window.addEventListener("resize", syncRatePillWidthToZoom);
 
   if (typeof window.videoPlayerNative !== "undefined") {
-    const hint = document.getElementById("introHint");
-    if (hint instanceof HTMLElement) hint.hidden = true;
-
     pendingNativeInitial = true;
     window.videoPlayerNative
       .getInitialVideoPayload()

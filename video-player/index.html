@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- YouTube embeds require a normal referrer; without this, many setups get error 153 for every video. -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="theme-color" content="#0f1114" />
     <title>Tesil Media Player</title>
     <link rel="stylesheet" href="styles.css" />
@@ -10,14 +12,6 @@
   <body>
     <main class="page">
       <h1 class="title">Tesil Media Player</h1>
-      <p id="introHint" class="intro-hint">
-        <strong>Windows:</strong> from
-        <a href="https://github.com/becknerd/Tesil-Player/releases">Releases</a>, download the
-        <strong>Windows portable</strong> <code>.zip</code>, extract it to any folder, and run
-        <strong>Tesil Media Player.exe</strong> inside — then use
-        <strong>Open video file</strong> or
-        double-click a video in File Explorer. You can also try a file below in this browser.
-      </p>
 
       <div class="upload-row">
         <input
@@ -35,7 +29,28 @@
         <span class="upload-row__name" id="fileName" aria-live="polite"></span>
       </div>
 
-      <div class="player" id="player" data-state="paused">
+      <div class="url-row">
+        <input
+          type="url"
+          id="urlInput"
+          class="url-row__input"
+          placeholder="Paste a YouTube link or direct video URL (MP4, WebM…)"
+          inputmode="url"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Video URL"
+        />
+        <button
+          type="button"
+          class="upload-row__btn url-row__btn"
+          id="loadUrlBtn"
+          data-tooltip="Load URL (Enter in field)"
+        >
+          Load URL
+        </button>
+      </div>
+
+      <div class="player" id="player" data-state="paused" data-source="native">
         <div class="player__viewport" id="videoViewport">
           <div class="player__zoom-layer" id="zoomLayer">
             <video
@@ -47,6 +62,7 @@
             >
               Your browser does not support HTML5 video.
             </video>
+            <div id="ytMount" class="player__yt-mount" hidden></div>
           </div>
         </div>
 
