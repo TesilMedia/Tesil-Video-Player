@@ -29,8 +29,6 @@ html {
   height: 100%;
   overflow-x: hidden;
   scrollbar-width: none;
-  /* Softer than default gray flash on tap (iOS / WebKit). */
-  -webkit-tap-highlight-color: rgba(138, 180, 248, 0.18);
 }
 
 html::-webkit-scrollbar {
@@ -48,8 +46,6 @@ body {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
-  /* Keeps rubber-band scroll from fighting the player on iOS. */
-  overscroll-behavior-y: contain;
 }
 
 body::-webkit-scrollbar {
@@ -62,10 +58,6 @@ body::-webkit-scrollbar {
   max-width: 960px;
   margin: 0 auto;
   padding: 1.5rem;
-  padding-top: max(1.5rem, env(safe-area-inset-top, 0px));
-  padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
-  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
-  padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
 }
 
 .title {
@@ -363,8 +355,8 @@ body::-webkit-scrollbar {
 
 .player__corner-tools {
   position: absolute;
-  top: max(clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem), env(safe-area-inset-top, 0px));
-  right: max(clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem), env(safe-area-inset-right, 0px));
+  top: clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem);
+  right: clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem);
   z-index: 2;
   display: flex;
   flex-direction: row;
@@ -375,8 +367,8 @@ body::-webkit-scrollbar {
 
 .player__corner-volume {
   position: absolute;
-  top: max(clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem), env(safe-area-inset-top, 0px));
-  left: max(clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem), env(safe-area-inset-left, 0px));
+  top: clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem);
+  left: clamp(0.28rem, 0.04rem + 1.6cqw, 0.75rem);
   z-index: 2;
   display: flex;
   flex-direction: row;
@@ -393,14 +385,8 @@ body::-webkit-scrollbar {
   z-index: 2;
   /* Shared with `.player__bar-tools` so the PiP/fullscreen cluster lines up with other chrome pills. */
   --chrome-pad-x: clamp(0.22rem, 0.03rem + 1.8cqw, 0.75rem);
-  --chrome-pad-b: max(
-    clamp(0.32rem, 0.1rem + 1.35cqw, 0.6rem),
-    env(safe-area-inset-bottom, 0px)
-  );
-  padding-top: clamp(0.42rem, 0.18rem + 2.4cqw, 0.95rem);
-  padding-right: max(var(--chrome-pad-x), env(safe-area-inset-right, 0px));
-  padding-bottom: var(--chrome-pad-b);
-  padding-left: max(var(--chrome-pad-x), env(safe-area-inset-left, 0px));
+  --chrome-pad-b: clamp(0.32rem, 0.1rem + 1.35cqw, 0.6rem);
+  padding: clamp(0.42rem, 0.18rem + 2.4cqw, 0.95rem) var(--chrome-pad-x) var(--chrome-pad-b);
   background: transparent;
   /* Do not set overflow-x on this ancestor: it clips the scrub preview (above the seek bar). */
   overflow: visible;
@@ -575,7 +561,7 @@ body::-webkit-scrollbar {
 /* Bottom-right cluster: same anchoring idea as `.player__corner-tools` (fixed to frame, not bar flex). */
 .player__bar-tools {
   position: absolute;
-  right: max(var(--chrome-pad-x), env(safe-area-inset-right, 0px));
+  right: var(--chrome-pad-x);
   bottom: var(--chrome-pad-b);
   z-index: 9;
   display: flex;
@@ -1006,8 +992,7 @@ body::-webkit-scrollbar {
   display: none !important;
 }
 
-/* Touch / iPhone: comfortable form targets + 16px URL (avoids iOS focus-zoom).
-   In-player pills use a tighter cqw curve than default — wide phones were ~35–40px tall. */
+/* Touch: URL field + buttons only (in-player pills match default `.player` cqw — ca5638fe). */
 @media (pointer: coarse) {
   .upload-row__btn,
   .url-row__btn {
@@ -1019,37 +1004,6 @@ body::-webkit-scrollbar {
     min-height: 44px;
     font-size: 1rem;
     padding: 0.55rem 0.75rem;
-  }
-
-  .player {
-    --chrome-control-height: clamp(1.35rem, 0.04rem + 4.8cqw, 1.85rem);
-    --chrome-font-size: clamp(0.75rem, 0.034rem + 2.1cqw, 0.8125rem);
-    --chrome-gap: clamp(0.08rem, 0.003rem + 0.9cqw, 0.28rem);
-    --vol-rail-expanded: min(8.5rem, max(2.4rem, 19cqw));
-  }
-
-  .player .icon-play {
-    font-size: clamp(8px, 0.13rem + 1.45cqw, 12px);
-  }
-
-  .player .icon-volume {
-    width: clamp(10px, 0.26rem + 1.65cqw, 15px);
-    height: clamp(10px, 0.26rem + 1.65cqw, 15px);
-  }
-
-  .player .icon-fs__svg {
-    width: clamp(9px, 0.15rem + 1.45cqw, 12px);
-    height: clamp(9px, 0.15rem + 1.45cqw, 12px);
-  }
-
-  .player .icon-frame-arrow {
-    width: clamp(7px, 0.13rem + 1.25cqw, 10px);
-    height: clamp(7px, 0.13rem + 1.25cqw, 10px);
-  }
-
-  .player .player__btn--frame {
-    width: clamp(0.82rem, 0.38rem + 1.75cqw, 1.3rem);
-    min-width: clamp(0.82rem, 0.38rem + 1.75cqw, 1.3rem);
   }
 
   /* Zoom only via two-finger pinch on touch; +/- / wheel / keys are disabled in JS. */
