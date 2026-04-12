@@ -1006,7 +1006,8 @@ body::-webkit-scrollbar {
   display: none !important;
 }
 
-/* Touch / iPhone: ~44pt targets, larger thumbs, 16px inputs (avoids iOS focus-zoom). */
+/* Touch / iPhone: comfortable form targets + 16px URL (avoids iOS focus-zoom).
+   Player chrome keeps default `.player` cqw scaling so HUD / scrub overlays stay compact. */
 @media (pointer: coarse) {
   .upload-row__btn,
   .url-row__btn {
@@ -1020,32 +1021,8 @@ body::-webkit-scrollbar {
     padding: 0.55rem 0.75rem;
   }
 
-  .player {
-    --chrome-control-height: clamp(2.6rem, 0.55rem + 9cqw, 3rem);
-    --chrome-font-size: clamp(0.8rem, 0.14rem + 3.4cqw, 0.95rem);
-    --chrome-gap: clamp(0.2rem, 0.02rem + 1.9cqw, 0.55rem);
-  }
-
-  .player__progress {
-    --range-thumb: clamp(18px, 0.45rem + 2.8cqw, 24px);
-    --range-track-h: clamp(10px, 0.32rem + 1.5cqw, 14px);
-  }
-
-  .player__progress-wrap {
-    padding-block: 4px;
-  }
-
-  .player__volume-slider {
-    --vol-thumb: clamp(18px, 0.45rem + 2.8cqw, 24px);
-    --vol-track-h: clamp(10px, 0.32rem + 1.5cqw, 14px);
-  }
-
   /* Zoom only via two-finger pinch on touch; +/- / wheel / keys are disabled in JS. */
   .player__zoom-group {
     display: none !important;
-  }
-
-  .tooltip-layer {
-    max-width: min(20em, calc(100vw - max(16px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
   }
 }
