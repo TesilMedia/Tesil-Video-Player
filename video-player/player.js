@@ -42,8 +42,12 @@
   let blobUrl = null;
   /** True after a user-chosen file, OS file launch, or drop (not the built-in sample). */
   let hasCustomSource = false;
-  /** `youtube` uses YouTube's embed only; custom player chrome is hidden. */
+  /** `native` = `<video>`; other values use an iframe embed and hide custom chrome. */
   let sourceKind = "native";
+
+  function isExternalEmbedSource() {
+    return sourceKind !== "native";
+  }
 
   const DEMO_SAMPLE_URL =
     "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
@@ -317,7 +321,7 @@
   let frameStepGen = 0;
 
   function stepByFrame(direction) {
-    if (sourceKind === "youtube") return;
+    if (isExternalEmbedSource()) return;
     if (!video.paused) video.pause();
     const dur = video.duration;
     if (!Number.isFinite(dur) || dur <= 0) return;
@@ -432,6 +436,82 @@
     return null;
   }
 
+  function parseVimeoVideoId(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return null;
+    const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    let url;
+    try {
+      url = new URL(withScheme);
+    } catch (_) {
+      return null;
+    }
+    const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host === "player.vimeo.com") {
+      const m = url.pathname.match(/^\/video\/(\d+)/);
+      return m ? m[1] : null;
+    }
+    if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
+      const segs = url.pathname.match(/\/(\d{6,})/g);
+      if (!segs || !segs.length) return null;
+      const last = segs[segs.length - 1].replace(/^\//, "");
+      return last || null;
+    }
+    return null;
+  }
+
+  /**
+   * @returns {{ kind: "video", video: string } | { kind: "channel", channel: string } | { kind: "clip", clip: string } | null}
+   */
+  function parseTwitchEmbedTarget(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return null;
+    const withScheme = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    let url;
+    try {
+      url = new URL(withScheme);
+    } catch (_) {
+      return null;
+    }
+    let host = url.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host === "m.twitch.tv") host = "twitch.tv";
+    if (host === "clips.twitch.tv") {
+      const slug = url.pathname.replace(/^\//, "").split("/")[0];
+      if (slug && /^[\w-]+$/.test(slug)) return { kind: "clip", clip: slug };
+      return null;
+    }
+    if (host !== "twitch.tv" && !host.endsWith(".twitch.tv")) return null;
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts[0] === "videos" && /^\d+$/.test(parts[1] || "")) {
+      return { kind: "video", video: `v${parts[1]}` };
+    }
+    if (parts.length >= 3 && parts[1] === "clip") {
+      const slug = parts[2] || "";
+      if (slug && /^[\w-]+$/.test(slug)) return { kind: "clip", clip: slug };
+      return null;
+    }
+    if (parts.length === 1) {
+      const ch = parts[0];
+      const reserved = new Set([
+        "videos",
+        "directory",
+        "downloads",
+        "settings",
+        "jobs",
+        "p",
+        "legal",
+        "security",
+        "subs",
+        "turbo",
+        "products",
+        "search",
+      ]);
+      if (reserved.has(ch.toLowerCase())) return null;
+      if (/^[a-zA-Z0-9_]{4,25}$/.test(ch)) return { kind: "channel", channel: ch };
+    }
+    return null;
+  }
+
   function isLikelyDirectVideoUrl(urlStr) {
     try {
       const u = new URL(urlStr);
@@ -442,12 +522,12 @@
     }
   }
 
-  function loadYouTubeFromId(videoId, displayLabel) {
+  function loadExternalEmbedIframe(kind, iframeSrc, iframeTitle, displayLabel) {
     hasCustomSource = true;
     revokeBlobUrl();
     exitYoutubeMode();
-    sourceKind = "youtube";
-    player.dataset.source = "youtube";
+    sourceKind = kind;
+    player.dataset.source = kind;
     player.classList.add("player--youtube-only");
     try {
       setZoomLevel(1);
@@ -463,18 +543,10 @@
     if (!(ytMount instanceof HTMLElement)) return;
     ytMount.hidden = false;
     ytMount.innerHTML = "";
-    const params = new URLSearchParams({
-      rel: "0",
-      modestbranding: "1",
-      playsinline: "1",
-    });
-    const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
-      videoId
-    )}?${params}`;
     const ifr = document.createElement("iframe");
     ifr.className = "player__youtube-iframe";
-    ifr.src = src;
-    ifr.title = "YouTube video";
+    ifr.src = iframeSrc;
+    ifr.title = iframeTitle;
     ifr.setAttribute("allowfullscreen", "");
     ifr.setAttribute(
       "allow",
@@ -483,9 +555,66 @@
     ifr.referrerPolicy = "strict-origin-when-cross-origin";
     ytMount.appendChild(ifr);
     if (fileNameEl instanceof HTMLElement) {
-      fileNameEl.textContent = displayLabel || "YouTube";
+      fileNameEl.textContent = displayLabel || iframeTitle;
     }
     clearAllFrameHold();
+  }
+
+  function loadYouTubeFromId(videoId, displayLabel) {
+    const params = new URLSearchParams({
+      rel: "0",
+      modestbranding: "1",
+      playsinline: "1",
+    });
+    const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
+      videoId
+    )}?${params}`;
+    loadExternalEmbedIframe(
+      "youtube",
+      src,
+      "YouTube video",
+      displayLabel || `YouTube · ${videoId}`
+    );
+  }
+
+  function loadVimeoFromId(videoId, displayLabel) {
+    const params = new URLSearchParams({
+      badge: "0",
+      autopause: "0",
+      playsinline: "1",
+    });
+    const src = `https://player.vimeo.com/video/${encodeURIComponent(videoId)}?${params}`;
+    loadExternalEmbedIframe(
+      "vimeo",
+      src,
+      "Vimeo video",
+      displayLabel || `Vimeo · ${videoId}`
+    );
+  }
+
+  function loadTwitchEmbed(target, displayLabel) {
+    const u = new URL("https://player.twitch.tv/");
+    u.searchParams.set("playsinline", "true");
+    const h = (window.location && window.location.hostname) || "";
+    const parents = [];
+    if (h) {
+      parents.push(h);
+      if (h === "127.0.0.1") parents.push("localhost");
+      else if (h === "localhost") parents.push("127.0.0.1");
+    }
+    if (!parents.length) parents.push("localhost");
+    for (const p of parents) u.searchParams.append("parent", p);
+    if (target.kind === "video") u.searchParams.set("video", target.video);
+    else if (target.kind === "channel") u.searchParams.set("channel", target.channel);
+    else u.searchParams.set("clip", target.clip);
+    const label =
+      displayLabel ||
+      (target.kind === "video"
+        ? `Twitch · ${target.video}`
+        : target.kind === "channel"
+          ? `Twitch · ${target.channel} (live)`
+          : `Twitch clip · ${target.clip}`);
+    loadExternalEmbedIframe("twitch", u.toString(), "Twitch video", label);
   }
 
   function loadVideoFromHttpUrl(urlStr) {
@@ -515,7 +644,7 @@
       hasCustomSource = false;
       if (fileNameEl instanceof HTMLElement) {
         fileNameEl.textContent =
-          "Could not play this URL. Try a direct MP4/WebM link, or use a YouTube link.";
+          "Could not play this URL. Try a direct MP4/WebM link, or a YouTube, Vimeo, or Twitch link.";
       }
     };
     video.addEventListener("error", onErr, { once: true });
@@ -534,10 +663,20 @@
       loadYouTubeFromId(ytId, `YouTube · ${ytId}`);
       return;
     }
+    const vimeoId = parseVimeoVideoId(trimmed);
+    if (vimeoId) {
+      loadVimeoFromId(vimeoId, `Vimeo · ${vimeoId}`);
+      return;
+    }
+    const twitchTarget = parseTwitchEmbedTarget(trimmed);
+    if (twitchTarget) {
+      loadTwitchEmbed(twitchTarget);
+      return;
+    }
     if (!isLikelyDirectVideoUrl(trimmed)) {
       if (fileNameEl instanceof HTMLElement) {
         fileNameEl.textContent =
-          "Unsupported URL. Use a YouTube link or a direct link to a video file (MP4, WebM, …).";
+          "Unsupported URL. Use YouTube, Vimeo, Twitch, or a direct link to a video file (MP4, WebM, …).";
       }
       return;
     }
@@ -623,7 +762,7 @@
   }
 
   function applyDemoSampleIfNeeded() {
-    if (sourceKind === "youtube") return;
+    if (isExternalEmbedSource()) return;
     if (hasCustomSource || pendingOsFileOpen || pendingNativeInitial || blobUrl) return;
     if (video.currentSrc) return;
     video.src = DEMO_SAMPLE_URL;
@@ -720,7 +859,7 @@
   }
 
   function syncScrubPreviewToPointer(clientX, clientY) {
-    if (sourceKind === "youtube") {
+    if (isExternalEmbedSource()) {
       if (scrubPreviewActive) hideScrubPreview();
       return;
     }
@@ -1154,7 +1293,7 @@
 
   videoViewport.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
-    if (sourceKind === "youtube") return;
+    if (isExternalEmbedSource()) return;
     viewportPointers.set(e.pointerId, {
       clientX: e.clientX,
       clientY: e.clientY,
@@ -1391,7 +1530,7 @@
   player.addEventListener(
     "wheel",
     (e) => {
-      if (sourceKind === "youtube") return;
+      if (isExternalEmbedSource()) return;
       const pr = player.getBoundingClientRect();
       if (
         e.clientX < pr.left ||
@@ -1678,7 +1817,7 @@
   }
 
   function shouldHandlePlayerKeyboard(e) {
-    if (sourceKind === "youtube") return false;
+    if (isExternalEmbedSource()) return false;
     const t = e.target;
     if (t === player || (t instanceof Node && player.contains(t))) return true;
     if (!pointerInsidePlayer) return false;
