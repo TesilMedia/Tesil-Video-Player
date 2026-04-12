@@ -2,7 +2,7 @@
 
 A focused **video player** for **Windows (desktop)** and **the browser**: open files, paste URLs, scrub with a live preview, zoom and pan, frame-step, and keyboard-driven controls.
 
-[![Latest release](https://img.shields.io/github/v/release/TesilMedia/Tesil-Player?logo=github&label=Windows%20portable)](https://github.com/TesilMedia/Tesil-Player/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/TesilMedia/Tesil-Video-Player?logo=github&label=Windows%20portable)](https://github.com/TesilMedia/Tesil-Video-Player/releases/latest)
 
 ---
 
@@ -15,6 +15,10 @@ Portable builds are attached to each GitHub **Release** (`.zip` containing `Tesi
 ## Try it in the browser
 
 The same UI lives under [`video-player/`](video-player/) as static HTML/CSS/JS.
+
+**Live (GitHub Pages):** [https://tesilmedia.github.io/Tesil-Video-Player/](https://tesilmedia.github.io/Tesil-Video-Player/) — home page embeds the player; the app UI is titled **Tesil Video Player**.
+
+**Local:**
 
 1. Clone the repo.
 2. From the `video-player` folder, serve over **http** (not `file://`), e.g.  

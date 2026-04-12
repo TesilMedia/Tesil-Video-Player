@@ -4,10 +4,10 @@
   "private": true,
   "description": "Tesil Video Player for Windows (desktop)",
   "author": "becknerd",
-  "homepage": "https://github.com/TesilMedia/Tesil-Player",
+  "homepage": "https://github.com/TesilMedia/Tesil-Video-Player",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TesilMedia/Tesil-Player.git"
+    "url": "https://github.com/TesilMedia/Tesil-Video-Player.git"
   },
   "main": "electron-main.cjs",
   "scripts": {
