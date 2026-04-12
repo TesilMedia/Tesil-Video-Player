@@ -293,12 +293,6 @@ body::-webkit-scrollbar {
   }
 }
 
-/* Two-finger pinch on the video: keep HUD + scrub preview from appearing mid-gesture. */
-.player.player--pinch-zoom .player__hud {
-  opacity: 0 !important;
-  pointer-events: none;
-}
-
 .player__corner-tools {
   position: absolute;
   top: clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem);

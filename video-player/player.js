@@ -54,22 +54,19 @@
   let previewDesiredTime = null;
   let previewSeekInFlight = false;
   let lastScrubTime = 0;
+  /** Which pointer owns an in-progress seek drag (document `pointerup` must ignore other pointers). */
+  let scrubPointerId = null;
 
   const MIN_ZOOM = 1;
   const MAX_ZOOM = 4;
   const ZOOM_STEP = 0.25;
-  /** Movement past this (1× zoom) cancels tap-to-play so page scroll can start on the player. */
+  /** At 1× zoom, movement past this before pointerup cancels tap-to-play (scroll starting on the player). */
   const VIEWPORT_TAP_CANCEL_MOVE_PX = 12;
   /** Two-finger span must reach this (px) before pinch-zoom activates (avoids jitter when touches start close). */
   const PINCH_MIN_START_DIST_PX = 28;
   /** Clamp per-move scale ratio so a bad frame does not explode zoom. */
   const PINCH_FACTOR_MIN = 0.55;
   const PINCH_FACTOR_MAX = 1.85;
-  /**
-   * After a touch enters the video viewport, suppress HUD chrome briefly so the second
-   * finger of a pinch can land without `pointerenter` / `pointerdown` flashing the UI first.
-   */
-  const TOUCH_VIEWPORT_CHROME_DEFER_MS = 240;
 
   let zoomLevel = 1;
   let panX = 0;
@@ -80,108 +77,6 @@
   const viewportPointers = new Map();
   /** @type {{ lastDist: number } | null} */
   let pinchState = null;
-  /** `performance.now()` until which chrome bumps are skipped for a leading viewport touch. */
-  let touchViewportChromeDeferUntil = 0;
-
-  function armTouchViewportChromeDefer() {
-    touchViewportChromeDeferUntil = performance.now() + TOUCH_VIEWPORT_CHROME_DEFER_MS;
-  }
-
-  function clearTouchViewportChromeDefer() {
-    touchViewportChromeDeferUntil = 0;
-  }
-
-  /** Touch-primary UIs; some Windows stacks report a finger as `pointerType: "mouse"`. */
-  function isTouchPrimaryUi() {
-    try {
-      return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /** True for real touch pointers or coarse touch-primary environments (covers mis-typed pointers). */
-  function isTouchDerivedUiEvent(e) {
-    if (!e.isTrusted) return false;
-    if (e instanceof PointerEvent) {
-      if (e.pointerType === "touch") return true;
-      return isTouchPrimaryUi();
-    }
-    try {
-      const cap = /** @type {{ firesTouchEvents?: boolean }} */ (e).sourceCapabilities;
-      return !!cap?.firesTouchEvents;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /**
-   * Top hit-test node must be the control or inside it (not a sibling overlay / video).
-   * Lets keyboard / mouse paths through when `clientX`/`clientY` are unusable.
-   */
-  function isDirectTopHitOnPlayerControl(control, clientX, clientY) {
-    if (!(control instanceof Element) || !player.contains(control)) return false;
-    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return true;
-    let stack;
-    try {
-      stack = document.elementsFromPoint(clientX, clientY);
-    } catch (_) {
-      return true;
-    }
-    if (!stack?.length) return false;
-    const top = stack[0];
-    if (!(top instanceof Element)) return false;
-    if (videoViewport.contains(top)) return false;
-    if (top === control) return true;
-    return control.contains(top);
-  }
-
-  function eventTargetPlayerHudControl(e) {
-    if (!(e.target instanceof Element)) return null;
-    const hit = e.target.closest("button, input, select, textarea");
-    if (!hit || !player.contains(hit) || videoViewport.contains(hit)) return null;
-    if (!hit.closest(".player__hud")) return null;
-    return hit;
-  }
-
-  /**
-   * After chrome auto-hides, the first touch on a HUD control (tap or long-press) only wakes UI;
-   * `pointerup` then enables controls. `setTimeout(0)` runs after the synthetic `click` pass.
-   */
-  let touchHudControlsAllowActions = false;
-
-  function scheduleTouchHudControlsPrimed() {
-    window.setTimeout(() => {
-      touchHudControlsAllowActions = true;
-    }, 0);
-  }
-
-  function onPlayerTouchPointerEndedForPrime(e) {
-    if (!(e instanceof PointerEvent)) return;
-    if (!isTouchDerivedUiEvent(e)) return;
-    if (pinchState || (viewportPointers.size >= 2 && isTwoFingerTouchPinch())) return;
-    if (!(e.target instanceof Node) || !player.contains(e.target)) return;
-    scheduleTouchHudControlsPrimed();
-  }
-
-  function applyTouchChromeInputGuards(e) {
-    const control = eventTargetPlayerHudControl(e);
-    if (!control) return;
-    const direct = isDirectTopHitOnPlayerControl(control, e.clientX, e.clientY);
-    if (!direct) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      return;
-    }
-    if (!isTouchDerivedUiEvent(e)) return;
-    if (!touchHudControlsAllowActions) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      clearTouchViewportChromeDefer();
-      exitChromeIdle();
-      armChromeIdleTimer();
-    }
-  }
 
   function isTwoFingerTouchPinch() {
     if (viewportPointers.size !== 2) return false;
@@ -644,16 +539,29 @@
     );
   }
 
+  /** While scrubbing, touch often leaves the thin hit strip vertically; still map X to the track. */
+  function clampClientXToProgressWrap(clientX) {
+    const rect = progressWrap.getBoundingClientRect();
+    if (rect.width <= 0) return clientX;
+    return Math.min(rect.right, Math.max(rect.left, clientX));
+  }
+
   function syncScrubPreviewToPointer(clientX, clientY) {
     const durOk = Number.isFinite(video.duration) && video.duration > 0;
-    const over = durOk && isPointOverScrubHitZone(clientX, clientY);
-    if (over) {
+    const scrubbing = player.dataset.scrubbing === "true";
+    if (!durOk) {
+      if (scrubPreviewActive && !scrubbing) hideScrubPreview();
+      return;
+    }
+    const over = isPointOverScrubHitZone(clientX, clientY);
+    if (scrubbing || over) {
       if (!scrubPreviewActive) {
         setScrubPreviewVisible(true);
         clearPreviewCanvas();
         if (previewTimeEl instanceof HTMLElement) previewTimeEl.textContent = "";
       }
-      updateScrubPreviewFromClientX(clientX);
+      const cx = scrubbing ? clampClientXToProgressWrap(clientX) : clientX;
+      updateScrubPreviewFromClientX(cx);
     } else if (scrubPreviewActive) {
       hideScrubPreview();
     }
@@ -661,8 +569,26 @@
 
   function endProgressScrubIfNeeded(e) {
     if (player.dataset.scrubbing !== "true") return;
+    if (
+      e instanceof PointerEvent &&
+      scrubPointerId != null &&
+      e.pointerId !== scrubPointerId
+    ) {
+      return;
+    }
+    if (e instanceof PointerEvent) {
+      try {
+        if (progress.hasPointerCapture(e.pointerId)) {
+          progress.releasePointerCapture(e.pointerId);
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    scrubPointerId = null;
     player.dataset.scrubbing = "false";
     syncProgressFromVideo();
+    armChromeIdleTimer();
     const ev = e;
     if (ev && "clientX" in ev && !isPointOverScrubHitZone(ev.clientX, ev.clientY)) {
       hideScrubPreview();
@@ -925,6 +851,7 @@
     btn.addEventListener("lostpointercapture", () => {
       if (direction < 0) framePointerHeldBack = false;
       else framePointerHeldForward = false;
+      bumpChromeActivity();
     });
   }
 
@@ -939,6 +866,7 @@
       framePointerHeldForward = false;
       requestAnimationFrame(() => {
         lastFrameStepViaPointer = false;
+        bumpChromeActivity();
       });
     },
     true
@@ -999,11 +927,7 @@
   function syncPinchChromeSuppression() {
     const suppress =
       viewportPointers.size >= 2 && isTwoFingerTouchPinch();
-    player.classList.toggle("player--pinch-zoom", suppress);
-    if (suppress) {
-      clearTouchViewportChromeDefer();
-      hideScrubPreview();
-    }
+    if (suppress) hideScrubPreview();
   }
 
   function beginPinchFromCurrentDistance() {
@@ -1037,7 +961,6 @@
     });
 
     if (viewportPointers.size === 2 && isTwoFingerTouchPinch()) {
-      clearTouchViewportChromeDefer();
       if (panPointer) panPointer.tapCancelled = true;
       if (beginPinchFromCurrentDistance()) e.preventDefault();
       syncPinchChromeSuppression();
@@ -1070,8 +993,6 @@
       }
       videoViewport.dataset.panning = "true";
     }
-    if (e.pointerType === "touch") armTouchViewportChromeDefer();
-    else clearTouchViewportChromeDefer();
     syncPinchChromeSuppression();
   });
 
@@ -1117,7 +1038,6 @@
   function endViewportPointer(e) {
     viewportPointers.delete(e.pointerId);
     if (viewportPointers.size === 0) {
-      clearTouchViewportChromeDefer();
       requestAnimationFrame(() => bumpChromeActivity());
     }
     syncPinchChromeSuppression();
@@ -1151,6 +1071,15 @@
   const IDLE_UI_MS = 2000;
   let chromeIdleTimer = null;
 
+  /** True while a continuous interaction should keep the HUD up without a running idle timer. */
+  function isChromeInteractionHold() {
+    if (pinchState) return true;
+    if (player.dataset.scrubbing === "true") return true;
+    if (frameKeyHeldBack || frameKeyHeldForward) return true;
+    if (framePointerHeldBack || framePointerHeldForward) return true;
+    return false;
+  }
+
   function clearChromeIdleTimer() {
     if (chromeIdleTimer != null) {
       clearTimeout(chromeIdleTimer);
@@ -1163,10 +1092,18 @@
   }
 
   function armChromeIdleTimer() {
+    if (isChromeInteractionHold()) {
+      clearChromeIdleTimer();
+      exitChromeIdle();
+      return;
+    }
     clearChromeIdleTimer();
     exitChromeIdle();
     chromeIdleTimer = setTimeout(() => {
       chromeIdleTimer = null;
+      if (isChromeInteractionHold()) {
+        return;
+      }
       const ae = document.activeElement;
       if (
         ae instanceof HTMLElement &&
@@ -1177,35 +1114,24 @@
         ae.blur();
       }
       requestAnimationFrame(() => {
+        if (isChromeInteractionHold()) return;
         player.classList.add("player--idle");
-        touchHudControlsAllowActions = false;
       });
     }, IDLE_UI_MS);
   }
 
   function bumpChromeActivity() {
-    if (pinchState) return;
-    if (viewportPointers.size >= 2 && isTwoFingerTouchPinch()) return;
-    if (performance.now() < touchViewportChromeDeferUntil) return;
+    if (isChromeInteractionHold()) {
+      clearChromeIdleTimer();
+      exitChromeIdle();
+      return;
+    }
     armChromeIdleTimer();
   }
 
-  player.addEventListener("pointerdown", applyTouchChromeInputGuards, true);
-  player.addEventListener("click", applyTouchChromeInputGuards, true);
-  player.addEventListener("pointerup", onPlayerTouchPointerEndedForPrime, false);
-  player.addEventListener("pointercancel", onPlayerTouchPointerEndedForPrime, false);
-
   player.addEventListener("pointermove", bumpChromeActivity);
-  player.addEventListener("pointerenter", (e) => {
+  player.addEventListener("pointerenter", () => {
     player.classList.remove("player--pointer-outside");
-    if (
-      e.pointerType === "touch" &&
-      e.target instanceof Node &&
-      videoViewport.contains(e.target)
-    ) {
-      armTouchViewportChromeDefer();
-      return;
-    }
     bumpChromeActivity();
   });
   /* Bubble so videoViewport pointerdown runs first and viewportPointers reflects two-finger pinch. */
@@ -1264,26 +1190,45 @@
     ) {
       return;
     }
-    if (performance.now() < touchViewportChromeDeferUntil) {
-      if (scrubPreviewActive) hideScrubPreview();
-      return;
-    }
+    const scrubbing = player.dataset.scrubbing === "true";
     const pr = player.getBoundingClientRect();
-    if (
+    const outsidePlayer =
       e.clientX < pr.left ||
       e.clientX > pr.right ||
       e.clientY < pr.top ||
-      e.clientY > pr.bottom
-    ) {
-      if (scrubPreviewActive) hideScrubPreview();
-      return;
+      e.clientY > pr.bottom;
+    if (!outsidePlayer) {
+      player.classList.remove("player--pointer-outside");
+    } else if (!scrubbing && !isChromeInteractionHold()) {
+      clearChromeIdleTimer();
+      exitChromeIdle();
+      player.classList.add("player--pointer-outside");
+    }
+    if (outsidePlayer) {
+      if (scrubPreviewActive && !scrubbing) hideScrubPreview();
+      if (!scrubbing) return;
     }
     syncScrubPreviewToPointer(e.clientX, e.clientY);
   });
 
   progress.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
     player.dataset.scrubbing = "true";
+    scrubPointerId = e.pointerId;
+    try {
+      progress.setPointerCapture(e.pointerId);
+    } catch (_) {
+      /* ignore */
+    }
     syncScrubPreviewToPointer(e.clientX, e.clientY);
+    bumpChromeActivity();
+  });
+
+  progress.addEventListener("pointermove", (e) => {
+    if (player.dataset.scrubbing !== "true") return;
+    if (scrubPointerId != null && e.pointerId !== scrubPointerId) return;
+    syncScrubPreviewToPointer(e.clientX, e.clientY);
+    bumpChromeActivity();
   });
 
   progress.addEventListener("input", () => {
@@ -1291,18 +1236,35 @@
     const t = (Number(progress.value) / 1000) * video.duration;
     video.currentTime = t;
     updateTimeDisplay();
-    if (scrubPreviewActive) {
+    if (scrubPreviewActive || player.dataset.scrubbing === "true") {
+      if (!scrubPreviewActive) {
+        setScrubPreviewVisible(true);
+        clearPreviewCanvas();
+        if (previewTimeEl instanceof HTMLElement) previewTimeEl.textContent = "";
+      }
       updateScrubPreviewFromRatio(Number(progress.value) / 1000);
     }
+    if (player.dataset.scrubbing === "true") bumpChromeActivity();
   });
 
   progress.addEventListener("pointerup", (e) => endProgressScrubIfNeeded(e));
   document.addEventListener("pointerup", (e) => endProgressScrubIfNeeded(e));
 
-  progress.addEventListener("pointercancel", () => {
+  progress.addEventListener("pointercancel", (e) => {
+    if (player.dataset.scrubbing !== "true") return;
+    if (scrubPointerId != null && e.pointerId !== scrubPointerId) return;
+    try {
+      if (progress.hasPointerCapture(e.pointerId)) {
+        progress.releasePointerCapture(e.pointerId);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    scrubPointerId = null;
     player.dataset.scrubbing = "false";
     syncProgressFromVideo();
     hideScrubPreview();
+    armChromeIdleTimer();
   });
 
   volumeSlider.addEventListener("input", () => {
@@ -1448,7 +1410,10 @@
   player.addEventListener("keyup", (e) => {
     if (e.target !== player && !player.contains(e.target)) return;
     const frameDir = frameStepDirectionFromKeyEvent(e);
-    if (frameDir != null) clearFrameKeyboardHoldDirection(frameDir);
+    if (frameDir != null) {
+      clearFrameKeyboardHoldDirection(frameDir);
+      bumpChromeActivity();
+    }
   });
 
   window.addEventListener("blur", clearAllFrameHold);
