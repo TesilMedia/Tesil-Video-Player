@@ -876,7 +876,10 @@
       return;
     }
     const over = isPointOverScrubHitZone(clientX, clientY);
-    if (scrubbing || over) {
+    /* Coarse/touch: only show preview while scrubbing (touch began on the bar), not when a
+       vertical swipe merely crosses the hit zone. Mouse keeps hover-to-preview. */
+    const showFromHover = over && !usesCoarsePrimaryPointer;
+    if (scrubbing || showFromHover) {
       if (!scrubPreviewActive) {
         setScrubPreviewVisible(true);
         clearPreviewCanvas();
