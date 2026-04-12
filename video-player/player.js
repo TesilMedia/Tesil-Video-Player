@@ -165,6 +165,19 @@
     }
   }
 
+  /** Apply slider + `video.muted` to the Web Audio gain node (no-op if not routed). */
+  function setWebAudioOutputGainFromControls() {
+    if (!webAudioVolumeRoute || !webAudioGain || !webAudioCtx) return;
+    let v = Math.max(0, Math.min(1, Number(volumeSlider.value)));
+    if (!Number.isFinite(v)) v = 1;
+    const out = video.muted ? 0 : v;
+    try {
+      webAudioGain.gain.setValueAtTime(out, webAudioCtx.currentTime);
+    } catch (_) {
+      webAudioGain.gain.value = out;
+    }
+  }
+
   function applyVolumeFromSlider() {
     if (!(volumeSlider instanceof HTMLInputElement)) return;
     let v = Math.max(0, Math.min(1, Number(volumeSlider.value)));
@@ -194,14 +207,7 @@
 
     video.volume = 1;
     /* Output level is gain; keep `video.muted` for the mute control (WebKit often ignores muted on this route). */
-    if (webAudioGain && webAudioCtx) {
-      const out = video.muted ? 0 : v;
-      try {
-        webAudioGain.gain.setValueAtTime(out, webAudioCtx.currentTime);
-      } catch (_) {
-        webAudioGain.gain.value = out;
-      }
-    }
+    setWebAudioOutputGainFromControls();
     void webAudioCtx.resume();
     setMutedUI();
   }
@@ -1292,6 +1298,7 @@
       webAudioVolumeRoute &&
       webAudioGain &&
       !video.muted &&
+      !video.paused &&
       webAudioGain.gain.value <= 0.0005;
     player.dataset.muted =
       video.muted || (!webAudioVolumeRoute && video.volume === 0) || silentByGain
@@ -1414,12 +1421,27 @@
     setState(true);
     lastMediaTime = null;
     startFramePeriodMeasure();
-    if (webAudioVolumeRoute && webAudioCtx) void webAudioCtx.resume();
+    if (webAudioVolumeRoute && webAudioCtx) {
+      void webAudioCtx.resume();
+      /* Pause may zero gain to flush buffered samples; restore loudness when playing again. */
+      setWebAudioOutputGainFromControls();
+    }
   });
 
   video.addEventListener("pause", () => {
     setState(false);
     stopFramePeriodMeasure();
+    /*
+     * Mobile WebKit: `MediaElementAudioSourceNode` can keep playing decoded audio briefly
+     * after `video.pause()`. Force the gain to zero immediately so pause feels silent.
+     */
+    if (webAudioVolumeRoute && webAudioGain && webAudioCtx) {
+      try {
+        webAudioGain.gain.setValueAtTime(0, webAudioCtx.currentTime);
+      } catch (_) {
+        webAudioGain.gain.value = 0;
+      }
+    }
   });
 
   video.addEventListener("volumechange", () => {
@@ -1989,25 +2011,13 @@
   muteBtn.addEventListener("click", () => {
     video.muted = !video.muted;
     if (webAudioVolumeRoute && webAudioGain && webAudioCtx) {
-      if (video.muted) {
-        try {
-          webAudioGain.gain.setValueAtTime(0, webAudioCtx.currentTime);
-        } catch (_) {
-          webAudioGain.gain.value = 0;
-        }
-      } else {
+      if (!video.muted) {
         let sv = Number(volumeSlider.value);
         if (sv === 0 || !Number.isFinite(sv)) {
           volumeSlider.value = "1";
-          sv = 1;
-        }
-        sv = Math.max(0, Math.min(1, sv));
-        try {
-          webAudioGain.gain.setValueAtTime(sv, webAudioCtx.currentTime);
-        } catch (_) {
-          webAudioGain.gain.value = sv;
         }
       }
+      setWebAudioOutputGainFromControls();
       void webAudioCtx.resume();
     } else if (!video.muted) {
       const sv = Number(volumeSlider.value);
