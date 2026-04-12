@@ -78,7 +78,9 @@
     window.matchMedia("(pointer: coarse)").matches;
 
   /** At 1× zoom, movement past this before pointerup cancels tap-to-play (scroll starting on the player). */
-  const VIEWPORT_TAP_CANCEL_MOVE_PX = usesCoarsePrimaryPointer ? 18 : 12;
+  const VIEWPORT_TAP_CANCEL_MOVE_PX = usesCoarsePrimaryPointer ? 30 : 12;
+  /** Coarse/touch: cancel tap-to-play if the finger stayed down longer than a quick tap (avoids long-press / slow drags). */
+  const VIEWPORT_TAP_MAX_DURATION_MS = usesCoarsePrimaryPointer ? 320 : Infinity;
   /** Two-finger span must reach this (px) before pinch-zoom activates (avoids jitter when touches start close). */
   const PINCH_MIN_START_DIST_PX = 28;
   /** Clamp per-move scale ratio so a bad frame does not explode zoom. */
@@ -1332,6 +1334,7 @@
       oy: panY,
       dragged: false,
       tapCancelled: false,
+      downT: performance.now(),
     };
     if (zoomLevel > 1.001) {
       try {
@@ -1401,6 +1404,7 @@
     if (!panPointer || e.pointerId !== panPointer.id) return;
     const dragged = panPointer.dragged;
     const tapCancelled = panPointer.tapCancelled;
+    const holdMs = performance.now() - (panPointer.downT ?? performance.now());
     panPointer = null;
     try {
       if (videoViewport.hasPointerCapture(e.pointerId)) {
@@ -1410,7 +1414,8 @@
       /* ignore */
     }
     videoViewport.dataset.panning = "false";
-    if (!dragged && zoomLevel <= 1.001 && !tapCancelled) togglePlay();
+    const tapQuickEnough = holdMs <= VIEWPORT_TAP_MAX_DURATION_MS;
+    if (!dragged && zoomLevel <= 1.001 && !tapCancelled && tapQuickEnough) togglePlay();
   }
 
   videoViewport.addEventListener("pointerup", endViewportPointer);
