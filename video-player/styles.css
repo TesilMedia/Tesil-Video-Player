@@ -878,7 +878,8 @@ body::-webkit-scrollbar {
   background: var(--chrome-control-bg);
   border: 1px solid var(--chrome-control-border);
   border-radius: 8px;
-  overflow: hidden;
+  /* `hidden` clips the range thumb on touch; thumbs need to extend slightly past the track. */
+  overflow: visible;
 }
 
 .player__volume > .player__volume-mute {
@@ -924,6 +925,12 @@ body::-webkit-scrollbar {
   appearance: none;
   background: transparent;
   cursor: pointer;
+  touch-action: pan-x;
+}
+
+.player__volume-slider:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .player__volume-slider::-webkit-slider-runnable-track {

@@ -77,6 +77,33 @@
     typeof window.matchMedia === "function" &&
     window.matchMedia("(pointer: coarse)").matches;
 
+  /** iOS and many mobile browsers ignore `video.volume` writes; mute still works. */
+  function browserAllowsMediaElementVolumeControl() {
+    try {
+      const t = document.createElement("video");
+      t.muted = true;
+      t.volume = 1;
+      const target = 0.37;
+      t.volume = target;
+      return Math.abs(t.volume - target) < 0.02;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  const programmaticVolumeAllowed = browserAllowsMediaElementVolumeControl();
+
+  function syncVolumeSliderLockedUI() {
+    if (!(volumeSlider instanceof HTMLInputElement)) return;
+    volumeSlider.disabled = !programmaticVolumeAllowed;
+    volumeSlider.setAttribute(
+      "aria-label",
+      programmaticVolumeAllowed
+        ? "Volume"
+        : "Volume (use device buttons in this browser)"
+    );
+  }
+
   /** At 1× zoom, movement past this before pointerup cancels tap-to-play (scroll starting on the player). */
   const VIEWPORT_TAP_CANCEL_MOVE_PX = usesCoarsePrimaryPointer ? 30 : 12;
   /** Coarse/touch: cancel tap-to-play if the finger stayed down longer than a quick tap (avoids long-press / slow drags). */
@@ -1752,6 +1779,7 @@
   document.addEventListener("touchcancel", endTouchScrubIfLifted, true);
 
   volumeSlider.addEventListener("input", () => {
+    if (!programmaticVolumeAllowed) return;
     const v = Number(volumeSlider.value);
     video.volume = v;
     video.muted = v === 0;
@@ -1802,7 +1830,7 @@
 
   muteBtn.addEventListener("click", () => {
     video.muted = !video.muted;
-    if (!video.muted && video.volume === 0) {
+    if (!video.muted && video.volume === 0 && programmaticVolumeAllowed) {
       video.volume = 1;
       volumeSlider.value = "1";
     }
@@ -1981,12 +2009,14 @@
         );
         break;
       case "ArrowUp":
+        if (!programmaticVolumeAllowed) break;
         e.preventDefault();
         video.volume = Math.min(1, video.volume + 0.1);
         video.muted = false;
         volumeSlider.value = String(video.volume);
         break;
       case "ArrowDown":
+        if (!programmaticVolumeAllowed) break;
         e.preventDefault();
         video.volume = Math.max(0, video.volume - 0.1);
         volumeSlider.value = String(video.volume);
@@ -2179,6 +2209,7 @@
   });
 
   volumeSlider.value = String(video.volume);
+  syncVolumeSliderLockedUI();
   setMutedUI();
   setState(!video.paused);
   syncPreviewVideoSrc();
