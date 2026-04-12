@@ -1538,7 +1538,6 @@
     "wheel",
     (e) => {
       if (isExternalEmbedSource()) return;
-      if (usesCoarsePrimaryPointer) return;
       const pr = player.getBoundingClientRect();
       if (
         e.clientX < pr.left ||
@@ -1554,18 +1553,9 @@
     { passive: false }
   );
 
-  zoomInBtn.addEventListener("click", () => {
-    if (usesCoarsePrimaryPointer) return;
-    adjustZoomByStep(1);
-  });
-  zoomOutBtn.addEventListener("click", () => {
-    if (usesCoarsePrimaryPointer) return;
-    adjustZoomByStep(-1);
-  });
-  zoomResetBtn.addEventListener("click", () => {
-    if (usesCoarsePrimaryPointer) return;
-    setZoomLevel(1);
-  });
+  zoomInBtn.addEventListener("click", () => adjustZoomByStep(1));
+  zoomOutBtn.addEventListener("click", () => adjustZoomByStep(-1));
+  zoomResetBtn.addEventListener("click", () => setZoomLevel(1));
 
   new ResizeObserver(() => {
     clampPan();
@@ -1833,23 +1823,23 @@
       return;
     }
 
-    /* Touch-first: iOS ignores or breaks fullscreen on a wrapper div; use the video element. */
-    if (usesCoarsePrimaryPointer) {
-      if (typeof video.webkitEnterFullscreen === "function") {
-        try {
-          video.webkitEnterFullscreen();
-          return;
-        } catch (_) {
-          /* not allowed */
-        }
-      }
-      if (typeof video.requestFullscreen === "function") {
-        try {
+    /* Touch: prefer standard video element fullscreen (Android + recent iOS), then WebKit native. */
+    if (!isExternalEmbedSource() && usesCoarsePrimaryPointer) {
+      try {
+        if (typeof video.requestFullscreen === "function") {
           await video.requestFullscreen();
           return;
-        } catch (_) {
-          /* not allowed */
         }
+      } catch (_) {
+        /* not allowed */
+      }
+      try {
+        if (typeof video.webkitEnterFullscreen === "function") {
+          video.webkitEnterFullscreen();
+          return;
+        }
+      } catch (_) {
+        /* not allowed */
       }
     }
 
@@ -1869,7 +1859,7 @@
     } catch (_) {
       /* not allowed */
     }
-    if (typeof video.webkitEnterFullscreen === "function") {
+    if (!isExternalEmbedSource() && typeof video.webkitEnterFullscreen === "function") {
       try {
         video.webkitEnterFullscreen();
       } catch (_) {
@@ -1977,18 +1967,15 @@
         break;
       case "+":
       case "=":
-        if (usesCoarsePrimaryPointer) break;
         e.preventDefault();
         if (!e.repeat) adjustZoomByStep(1);
         break;
       case "-":
       case "_":
-        if (usesCoarsePrimaryPointer) break;
         e.preventDefault();
         if (!e.repeat) adjustZoomByStep(-1);
         break;
       case "0":
-        if (usesCoarsePrimaryPointer) break;
         e.preventDefault();
         if (!e.repeat) setZoomLevel(1);
         break;

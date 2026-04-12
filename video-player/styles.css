@@ -454,6 +454,41 @@ body::-webkit-scrollbar {
   pointer-events: none;
 }
 
+/*
+ * Touch: when chrome is faded (idle / pointer-outside), keep controls hit-testable so PiP,
+ * fullscreen, seek, and zoom still receive taps instead of falling through to the video.
+ */
+@media (hover: none) and (pointer: coarse) {
+  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__corner-volume,
+  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__corner-tools,
+  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__chrome
+    .player__progress-wrap,
+  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__chrome
+    > .player__bar,
+  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__chrome
+    > .player__bar-tools,
+  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__corner-volume,
+  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__corner-tools,
+  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__chrome
+    .player__progress-wrap,
+  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__chrome
+    > .player__bar,
+  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
+    .player__chrome
+    > .player__bar-tools {
+    pointer-events: auto;
+  }
+}
+
 .player__progress-wrap {
   position: relative;
   margin-bottom: var(--chrome-gap);
@@ -992,7 +1027,7 @@ body::-webkit-scrollbar {
   display: none !important;
 }
 
-/* Touch: URL field + buttons only (in-player pills match default `.player` cqw — ca5638fe). */
+/* Touch: slightly smaller in-player pills than default cqw; URL row stays tappable. */
 @media (pointer: coarse) {
   .upload-row__btn,
   .url-row__btn {
@@ -1006,8 +1041,10 @@ body::-webkit-scrollbar {
     padding: 0.55rem 0.75rem;
   }
 
-  /* Zoom only via two-finger pinch on touch; +/- / wheel / keys are disabled in JS. */
-  .player__zoom-group {
-    display: none !important;
+  .player {
+    --chrome-control-height: clamp(0.85rem, 0.05rem + 6.8cqw, 2.1rem);
+    --chrome-font-size: clamp(0.38rem, 0.042rem + 2.85cqw, 0.78rem);
+    --chrome-gap: clamp(0.04rem, 0.005rem + 1.2cqw, 0.38rem);
+    --vol-rail-expanded: min(12rem, max(3rem, 26cqw));
   }
 }
