@@ -353,6 +353,13 @@ body::-webkit-scrollbar {
   }
 }
 
+/* Touch + coarse pointer: no fade when hiding chrome (outside tap or idle). */
+@media (hover: none) and (pointer: coarse) {
+  .player.player--idle .player__hud {
+    transition: none !important;
+  }
+}
+
 .player__corner-tools {
   position: absolute;
   top: clamp(0.3rem, 0.08rem + 1.2cqw, 0.75rem);

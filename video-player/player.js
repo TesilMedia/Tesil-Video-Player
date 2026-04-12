@@ -1477,6 +1477,38 @@
     armChromeIdleTimer();
   }
 
+  /** Mobile: tap outside #player hides chrome immediately (idle timer is too slow). */
+  function dismissChromeForOutsideTap() {
+    if (!usesCoarsePrimaryPointer) return;
+    clearChromeIdleTimer();
+    player.classList.add("player--idle");
+    player.classList.add("player--pointer-outside");
+    const ae = document.activeElement;
+    if (
+      ae instanceof HTMLElement &&
+      player.contains(ae) &&
+      ((chromeEl && chromeEl.contains(ae)) ||
+        (cornerTools && cornerTools.contains(ae)) ||
+        (cornerVolume && cornerVolume.contains(ae)))
+    ) {
+      ae.blur();
+    }
+    hideScrubPreview();
+  }
+
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (!usesCoarsePrimaryPointer || e.button !== 0) return;
+      if (!(e.target instanceof Node) || !document.documentElement.contains(e.target)) return;
+      if (player.contains(e.target)) return;
+      if (player.dataset.scrubbing === "true") return;
+      if (isChromeInteractionHold()) return;
+      dismissChromeForOutsideTap();
+    },
+    true
+  );
+
   player.addEventListener("pointermove", bumpChromeActivity);
   player.addEventListener("pointerenter", () => {
     pointerInsidePlayer = true;
@@ -1485,10 +1517,12 @@
   });
   /* Bubble so videoViewport pointerdown runs first and viewportPointers reflects two-finger pinch. */
   player.addEventListener("pointerdown", (e) => {
-    if (e.pointerType === "touch" && e.target instanceof Node && player.contains(e.target)) {
-      activeTouchPointersOnPlayer.add(e.pointerId);
-      pointerInsidePlayer = true;
+    if (e.target instanceof Node && player.contains(e.target)) {
       player.classList.remove("player--pointer-outside");
+      if (e.pointerType === "touch") {
+        activeTouchPointersOnPlayer.add(e.pointerId);
+        pointerInsidePlayer = true;
+      }
     }
     bumpChromeActivity();
   });
