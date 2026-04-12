@@ -353,9 +353,15 @@
 
   function syncRatePillWidthToZoom() {
     if (!(zoomGroup instanceof HTMLElement) || !(ratePill instanceof HTMLElement)) return;
-    const w = zoomGroup.offsetWidth;
-    if (w > 0) ratePill.style.width = `${w}px`;
-    else ratePill.style.removeProperty("width");
+    const wZoom = zoomGroup.offsetWidth;
+    ratePill.style.removeProperty("width");
+    const wNatural = Math.ceil(ratePill.getBoundingClientRect().width);
+    if (wZoom <= 0) {
+      if (wNatural > 0) ratePill.style.width = `${wNatural}px`;
+      else ratePill.style.removeProperty("width");
+      return;
+    }
+    ratePill.style.width = `${Math.max(wZoom, wNatural)}px`;
   }
 
   function applyZoomTransform() {
@@ -1444,6 +1450,7 @@
     } else {
       playbackRateSelect.value = String(PLAYBACK_RATES[playbackRateIndex()]);
     }
+    requestAnimationFrame(() => syncRatePillWidthToZoom());
   }
 
   function nudgePlaybackRate(deltaSteps) {
@@ -1456,6 +1463,7 @@
     );
     video.playbackRate = PLAYBACK_RATES[i];
     playbackRateSelect.value = String(PLAYBACK_RATES[i]);
+    requestAnimationFrame(() => syncRatePillWidthToZoom());
   }
 
   playbackRateSelect.addEventListener("change", () => {

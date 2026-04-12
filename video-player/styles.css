@@ -803,7 +803,7 @@ body::-webkit-scrollbar {
   height: clamp(8px, 0.18rem + 1.8cqw, 11px);
 }
 
-/* Width set in player.js to match #zoomGroup (intrinsic max-content width). */
+/* Width set in player.js: at least #zoomGroup, never narrower than the speed label needs. */
 .player__rate {
   box-sizing: border-box;
   display: inline-flex;
@@ -838,11 +838,12 @@ body::-webkit-scrollbar {
 
 .player__rate-select-wrap {
   position: relative;
-  flex: 1 1 0;
+  /* Grow like before when the pill is widened to match zoom, but do not shrink below the label. */
+  flex: 1 1 auto;
+  min-width: min-content;
   display: flex;
   align-items: stretch;
   align-self: stretch;
-  min-width: 0;
   justify-content: center;
 }
 
@@ -882,6 +883,7 @@ body::-webkit-scrollbar {
 
 /* One pill: mute + horizontal rail (always visible; rail width scales with `--vol-rail-expanded`). */
 .player__volume {
+  --volume-pill-radius: 8px;
   box-sizing: border-box;
   display: inline-flex;
   align-items: stretch;
@@ -890,7 +892,7 @@ body::-webkit-scrollbar {
   height: var(--chrome-control-height);
   background: var(--chrome-control-bg);
   border: 1px solid var(--chrome-control-border);
-  border-radius: 8px;
+  border-radius: var(--volume-pill-radius);
   /* `hidden` clips the range thumb on touch; thumbs need to extend slightly past the track. */
   overflow: visible;
 }
@@ -904,7 +906,8 @@ body::-webkit-scrollbar {
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 0;
+  /* Square inner corners would paint hover past the pill’s rounded outline; match the pill’s left arc. */
+  border-radius: var(--volume-pill-radius) 0 0 var(--volume-pill-radius);
   background: transparent;
   box-shadow: none;
   font-size: var(--chrome-font-size);
