@@ -118,6 +118,8 @@
   let webAudioCtx = null;
   /** @type {GainNode | null} */
   let webAudioGain = null;
+  /** Value at `pointerdown` on the volume range; mobile often emits a bogus `input` of 0 first. */
+  let volPointerBaseline = null;
 
   function webAudioVolumeConstructorAvailable() {
     return (
@@ -149,7 +151,11 @@
       webAudioGain = gain;
       webAudioVolumeRoute = true;
       video.volume = 1;
-      gain.gain.value = Math.max(0, Math.min(1, Number(volumeSlider.value) || 0));
+      {
+        const raw = Number(volumeSlider.value);
+        const g0 = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 1;
+        gain.gain.value = g0;
+      }
       void ctx.resume();
       return true;
     } catch (_) {
@@ -161,8 +167,22 @@
 
   function applyVolumeFromSlider() {
     if (!(volumeSlider instanceof HTMLInputElement)) return;
-    const v = Math.max(0, Math.min(1, Number(volumeSlider.value)));
+    let v = Math.max(0, Math.min(1, Number(volumeSlider.value)));
     if (!Number.isFinite(v)) return;
+
+    if (!elementVolumeControlsOutput) {
+      const baseline = volPointerBaseline;
+      if (
+        !webAudioVolumeRoute &&
+        baseline != null &&
+        Number.isFinite(baseline) &&
+        baseline > 0.05 &&
+        v === 0
+      ) {
+        v = Math.max(0, Math.min(1, baseline));
+        volumeSlider.value = String(v);
+      }
+    }
 
     if (elementVolumeControlsOutput) {
       video.volume = v;
@@ -173,8 +193,9 @@
     if (!ensureWebAudioGainRoute()) return;
 
     video.volume = 1;
-    video.muted = v === 0;
-    if (!video.muted && webAudioGain && webAudioCtx) {
+    /* Level is gain only; `video.muted` stays for the mute button (avoids bogus touch `input`). */
+    video.muted = false;
+    if (webAudioGain && webAudioCtx) {
       try {
         webAudioGain.gain.setValueAtTime(v, webAudioCtx.currentTime);
       } catch (_) {
@@ -182,6 +203,7 @@
       }
     }
     void webAudioCtx.resume();
+    setMutedUI();
   }
 
   function bumpVolumeKeyboard(delta) {
@@ -1265,7 +1287,15 @@
   }
 
   function setMutedUI() {
-    player.dataset.muted = video.muted || video.volume === 0 ? "true" : "false";
+    const silentByGain =
+      webAudioVolumeRoute &&
+      webAudioGain &&
+      !video.muted &&
+      webAudioGain.gain.value <= 0.0005;
+    player.dataset.muted =
+      video.muted || (!webAudioVolumeRoute && video.volume === 0) || silentByGain
+        ? "true"
+        : "false";
     muteBtn.setAttribute("aria-label", video.muted ? "Unmute" : "Mute");
     muteBtn.dataset.tooltip = video.muted ? "Unmute (M)" : "Mute (M)";
   }
@@ -1899,6 +1929,18 @@
   }
   volumeSlider.addEventListener("input", onVolumeSliderInteraction);
   volumeSlider.addEventListener("change", onVolumeSliderInteraction);
+  if (volumeSlider instanceof HTMLElement) {
+    volumeSlider.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      volPointerBaseline = Number(volumeSlider.value);
+    });
+    volumeSlider.addEventListener("pointerup", () => {
+      volPointerBaseline = null;
+    });
+    volumeSlider.addEventListener("pointercancel", () => {
+      volPointerBaseline = null;
+    });
+  }
 
   fileInput.addEventListener("change", () => {
     const file = fileInput.files && fileInput.files[0];
