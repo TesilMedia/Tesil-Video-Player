@@ -454,41 +454,6 @@ body::-webkit-scrollbar {
   pointer-events: none;
 }
 
-/*
- * Touch: when chrome is faded (idle / pointer-outside), keep controls hit-testable so PiP,
- * fullscreen, seek, and zoom still receive taps instead of falling through to the video.
- */
-@media (hover: none) and (pointer: coarse) {
-  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__corner-volume,
-  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__corner-tools,
-  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__chrome
-    .player__progress-wrap,
-  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__chrome
-    > .player__bar,
-  .player.player--idle:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__chrome
-    > .player__bar-tools,
-  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__corner-volume,
-  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__corner-tools,
-  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__chrome
-    .player__progress-wrap,
-  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__chrome
-    > .player__bar,
-  .player.player--pointer-outside:not(:has(.player__hud:focus-within)):not([data-scrubbing="true"])
-    .player__chrome
-    > .player__bar-tools {
-    pointer-events: auto;
-  }
-}
-
 .player__progress-wrap {
   position: relative;
   margin-bottom: var(--chrome-gap);

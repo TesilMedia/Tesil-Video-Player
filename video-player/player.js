@@ -634,9 +634,7 @@
     revokeBlobUrl();
     video.hidden = false;
     player.dataset.source = "native";
-    if (pipBtn instanceof HTMLElement && document.pictureInPictureEnabled) {
-      pipBtn.hidden = false;
-    }
+    syncPipVisibility();
     video.src = urlStr;
     try {
       const host = new URL(urlStr).hostname;
@@ -706,6 +704,7 @@
     syncPreviewVideoSrc();
     video.playbackRate = 1;
     playbackRateSelect.value = "1";
+    syncPipVisibility();
     video.play().catch(() => {});
   }
 
@@ -722,6 +721,7 @@
     syncPreviewVideoSrc();
     video.playbackRate = 1;
     playbackRateSelect.value = "1";
+    syncPipVisibility();
     video.play().catch(() => {});
   }
 
@@ -1766,12 +1766,20 @@
     }
   });
 
-  if (!document.pictureInPictureEnabled) {
-    pipBtn.hidden = true;
+  function syncPipVisibility() {
+    if (!(pipBtn instanceof HTMLElement)) return;
+    if (video.disablePictureInPicture === true) {
+      pipBtn.hidden = true;
+      return;
+    }
+    pipBtn.hidden = typeof video.requestPictureInPicture !== "function";
   }
 
+  syncPipVisibility();
+
   pipBtn.addEventListener("click", async () => {
-    if (!document.pictureInPictureEnabled) return;
+    if (video.disablePictureInPicture === true) return;
+    if (typeof video.requestPictureInPicture !== "function") return;
     try {
       if (document.pictureInPictureElement === video) {
         await document.exitPictureInPicture();
@@ -1784,10 +1792,16 @@
   });
 
   fullscreenBtn.addEventListener("click", async () => {
+    /*
+     * Match v1.1.10: toggle on #player via the standard Fullscreen API first (works in the site
+     * iframe on Windows). Exit both standard and WebKit document fullscreen when needed — using
+     * only exitFullscreen() misses webkitFullscreenElement on some builds and left "stuck" toggles.
+     */
     if (
       !isExternalEmbedSource() &&
-      typeof video.webkitDisplayingFullscreen === "boolean" &&
-      video.webkitDisplayingFullscreen &&
+      !document.fullscreenElement &&
+      !document.webkitFullscreenElement &&
+      video.webkitDisplayingFullscreen === true &&
       typeof video.webkitExitFullscreen === "function"
     ) {
       try {
@@ -1798,24 +1812,15 @@
       return;
     }
 
-    const inFs =
-      document.fullscreenElement != null || document.webkitFullscreenElement != null;
-    if (inFs) {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
       try {
         if (document.exitFullscreen) await document.exitFullscreen();
-        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
       } catch (_) {
         /* not allowed */
       }
-      return;
-    }
-
-    if (isExternalEmbedSource()) {
       try {
-        if (typeof player.requestFullscreen === "function") {
-          await player.requestFullscreen();
-        } else if (typeof player.webkitRequestFullscreen === "function") {
-          await player.webkitRequestFullscreen();
+        if (document.webkitExitFullscreen && document.webkitFullscreenElement) {
+          await document.webkitExitFullscreen();
         }
       } catch (_) {
         /* not allowed */
@@ -1823,16 +1828,9 @@
       return;
     }
 
-    /*
-     * Native <video>: try wrapper first (works on desktop over plain http when the API allows it),
-     * then <video> element fullscreen, then WebKit video-only (typical iPhone).
-     * Do not branch on coarse pointer alone — that skipped the player on touch and broke http.
-     */
     try {
-      if (typeof player.requestFullscreen === "function") {
-        await player.requestFullscreen();
-        return;
-      }
+      await player.requestFullscreen();
+      return;
     } catch (_) {
       /* not allowed */
     }
@@ -1844,6 +1842,9 @@
     } catch (_) {
       /* not allowed */
     }
+
+    if (isExternalEmbedSource()) return;
+
     try {
       if (typeof video.requestFullscreen === "function") {
         await video.requestFullscreen();
