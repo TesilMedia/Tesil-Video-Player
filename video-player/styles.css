@@ -153,6 +153,10 @@ body::-webkit-scrollbar {
   cursor: pointer;
   border: none;
   transition: background 0.15s ease, transform 0.1s ease;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 .upload-row__btn:hover {
@@ -337,6 +341,24 @@ body::-webkit-scrollbar {
 .player__hud {
   opacity: 0;
   transition: opacity 0.2s ease;
+}
+
+/*
+ * iOS Safari: long-press on controls otherwise shows the link/image callout, text loupe,
+ * and selection handles. Range inputs keep their existing touch-action for scrubbing.
+ */
+.player__hud button,
+.player__hud .player__rate-select,
+.player__hud .player__time,
+.player__hud input[type="range"] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.player__hud button,
+.player__hud .player__rate-select {
+  touch-action: manipulation;
 }
 
 .player:hover .player__hud,
