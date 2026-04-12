@@ -318,15 +318,6 @@ body::-webkit-scrollbar {
   -webkit-touch-callout: none;
 }
 
-/*
- * Paused frames show subsampling + compression more than motion. We cannot sharpen real
- * detail from the bitstream; a light contrast/sat boost only improves *perceived* clarity.
- * Reduce or remove these values if it looks too punchy on your sources.
- */
-.player[data-state="paused"] .player__video {
-  filter: contrast(1.05) saturate(1.08);
-}
-
 .player__preview-src {
   position: absolute;
   width: 160px;
