@@ -60,14 +60,6 @@ Tesil Video Player is a lightweight custom video player that runs in the browser
 
 ## Embed in your website
 
-Use the dedicated embed page (player-only view; no title, file/link rows, or shortcuts panel):
-
-`https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html`
-
-You can also pre-load a source with `src`:
-
-`https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html?src=`
-
 Example iframe:
 
 ```html
