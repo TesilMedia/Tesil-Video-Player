@@ -1333,7 +1333,12 @@
     /* Coarse/touch: only show preview while scrubbing (touch began on the bar), not when a
        vertical swipe merely crosses the hit zone. Mouse keeps hover-to-preview. */
     const showFromHover = over && !usesCoarsePrimaryPointer;
-    if (scrubbing || showFromHover) {
+    /*
+     * Mobile scrubbing UX: hide preview immediately once the finger leaves the progress hit zone.
+     * Desktop keeps preview while scrubbing, even slightly outside, for easier precision.
+     */
+    const showWhileScrubbing = scrubbing && (!usesCoarsePrimaryPointer || over);
+    if (showWhileScrubbing || showFromHover) {
       if (!scrubPreviewActive) {
         setScrubPreviewVisible(true);
         clearPreviewCanvas();
@@ -1386,6 +1391,10 @@
     player.dataset.scrubbing = "false";
     syncProgressFromVideo();
     armChromeIdleTimer();
+    if (usesCoarsePrimaryPointer) {
+      hideScrubPreview();
+      return;
+    }
     if (
       endClientX != null &&
       endClientY != null &&
@@ -1947,6 +1956,7 @@
   });
 
   function endViewportPointer(e) {
+    const endedByCancel = e.type === "pointercancel";
     viewportPointers.delete(e.pointerId);
     if (viewportPointers.size === 0) {
       requestAnimationFrame(() => bumpChromeActivity());
@@ -1963,7 +1973,7 @@
 
     if (!panPointer || e.pointerId !== panPointer.id) return;
     const dragged = panPointer.dragged;
-    const tapCancelled = panPointer.tapCancelled;
+    const tapCancelled = panPointer.tapCancelled || endedByCancel;
     const holdMs = performance.now() - (panPointer.downT ?? performance.now());
     panPointer = null;
     try {
