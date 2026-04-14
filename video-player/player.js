@@ -1323,6 +1323,13 @@
     scrubPreview.style.removeProperty("--scrub-preview-h");
   }
 
+  function ensureScrubPreviewVisible() {
+    if (scrubPreviewActive) return;
+    setScrubPreviewVisible(true);
+    clearPreviewCanvas();
+    if (previewTimeEl instanceof HTMLElement) previewTimeEl.textContent = "";
+  }
+
   /** Progress track plus a few pixels so preview still shows when hovering slightly off the bar. */
   const SCRUB_HIT_PAD_PX = 6;
 
@@ -1404,21 +1411,7 @@
       endClientX = e.clientX;
       endClientY = e.clientY;
     }
-    const capId = scrubPointerId;
-    if (capId != null) {
-      try {
-        if (progress.hasPointerCapture(capId)) {
-          progress.releasePointerCapture(capId);
-        }
-      } catch (_) {
-        /* ignore */
-      }
-    }
-    scrubPointerId = null;
-    scrubTouchId = null;
-    player.dataset.scrubbing = "false";
-    syncProgressFromVideo();
-    armChromeIdleTimer();
+    stopProgressScrubState();
     if (usesCoarsePrimaryPointer) {
       hideScrubPreview();
       return;
@@ -1430,6 +1423,27 @@
     ) {
       hideScrubPreview();
     }
+  }
+
+  function releaseScrubPointerCapture() {
+    const capId = scrubPointerId;
+    if (capId == null) return;
+    try {
+      if (progress.hasPointerCapture(capId)) {
+        progress.releasePointerCapture(capId);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function stopProgressScrubState() {
+    releaseScrubPointerCapture();
+    scrubPointerId = null;
+    scrubTouchId = null;
+    player.dataset.scrubbing = "false";
+    syncProgressFromVideo();
+    armChromeIdleTimer();
   }
 
   function timeAtProgressClientX(clientX) {
@@ -2102,6 +2116,15 @@
     hideScrubPreview();
   }
 
+  function isClientPointOutsideRect(clientX, clientY, rect) {
+    return (
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
+    );
+  }
+
   document.addEventListener(
     "pointerdown",
     (e) => {
@@ -2157,7 +2180,16 @@
     },
     true
   );
-  player.addEventListener("wheel", bumpChromeActivity, { passive: true });
+  function onPlayerWheel(e) {
+    bumpChromeActivity();
+    if (isExternalEmbedSource()) return;
+    const pr = player.getBoundingClientRect();
+    if (isClientPointOutsideRect(e.clientX, e.clientY, pr)) return;
+    e.preventDefault();
+    zoomFromWheel(e.deltaY, e.clientX, e.clientY);
+  }
+
+  player.addEventListener("wheel", onPlayerWheel, { passive: false });
   player.addEventListener("focusin", (e) => {
     if (!(e.target instanceof Node)) return;
     const inChrome = chromeEl && chromeEl.contains(e.target);
@@ -2177,25 +2209,6 @@
     player.classList.add("player--pointer-outside");
   });
 
-  player.addEventListener(
-    "wheel",
-    (e) => {
-      if (isExternalEmbedSource()) return;
-      const pr = player.getBoundingClientRect();
-      if (
-        e.clientX < pr.left ||
-        e.clientX > pr.right ||
-        e.clientY < pr.top ||
-        e.clientY > pr.bottom
-      ) {
-        return;
-      }
-      e.preventDefault();
-      zoomFromWheel(e.deltaY, e.clientX, e.clientY);
-    },
-    { passive: false }
-  );
-
   wireHeldChromeButton(zoomInBtn, () => adjustZoomByStep(1));
   wireHeldChromeButton(zoomOutBtn, () => adjustZoomByStep(-1));
   zoomResetBtn.addEventListener("click", () => setZoomLevel(1));
@@ -2214,11 +2227,7 @@
     }
     const scrubbing = player.dataset.scrubbing === "true";
     const pr = player.getBoundingClientRect();
-    const outsidePlayer =
-      e.clientX < pr.left ||
-      e.clientX > pr.right ||
-      e.clientY < pr.top ||
-      e.clientY > pr.bottom;
+    const outsidePlayer = isClientPointOutsideRect(e.clientX, e.clientY, pr);
     if (!outsidePlayer) {
       player.classList.remove("player--pointer-outside");
     } else if (!scrubbing && !isChromeInteractionHold()) {
@@ -2262,11 +2271,7 @@
     video.currentTime = t;
     updateTimeDisplay();
     if (scrubPreviewActive || player.dataset.scrubbing === "true") {
-      if (!scrubPreviewActive) {
-        setScrubPreviewVisible(true);
-        clearPreviewCanvas();
-        if (previewTimeEl instanceof HTMLElement) previewTimeEl.textContent = "";
-      }
+      ensureScrubPreviewVisible();
       updateScrubPreviewFromRatio(Number(progress.value) / 1000);
     }
     if (player.dataset.scrubbing === "true") bumpChromeActivity();
@@ -2278,22 +2283,8 @@
   progress.addEventListener("pointercancel", (e) => {
     if (player.dataset.scrubbing !== "true") return;
     if (scrubPointerId != null && e.pointerId !== scrubPointerId) return;
-    const capId = scrubPointerId;
-    if (capId != null) {
-      try {
-        if (progress.hasPointerCapture(capId)) {
-          progress.releasePointerCapture(capId);
-        }
-      } catch (_) {
-        /* ignore */
-      }
-    }
-    scrubPointerId = null;
-    scrubTouchId = null;
-    player.dataset.scrubbing = "false";
-    syncProgressFromVideo();
+    stopProgressScrubState();
     hideScrubPreview();
-    armChromeIdleTimer();
   });
 
   progress.addEventListener(
