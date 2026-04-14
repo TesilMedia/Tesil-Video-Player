@@ -29,27 +29,6 @@
         margin: 0 auto;
         padding: 1rem 1.25rem 1.25rem;
       }
-      .top {
-        flex-shrink: 0;
-        margin-bottom: 0.75rem;
-      }
-      .top p {
-        margin: 0;
-        font-size: 0.9rem;
-        color: var(--muted);
-        line-height: 1.5;
-      }
-      .top strong {
-        color: var(--text);
-        font-weight: 600;
-      }
-      .top a {
-        color: var(--accent);
-        text-decoration: none;
-      }
-      .top a:hover {
-        text-decoration: underline;
-      }
       .embed {
         border-radius: var(--radius);
         overflow: hidden;
@@ -59,26 +38,13 @@
       .embed iframe {
         display: block;
         width: 100%;
-        height: min(calc(100dvh - 7rem), 1200px);
+        height: min(calc(100dvh - 2.5rem), 1200px);
         border: 0;
       }
     </style>
   </head>
   <body>
     <div class="shell">
-      <header class="top">
-        <p>
-          <strong>Tesil Video Player</strong> — embedded below. You can also
-          <a href="video-player/" target="_blank" rel="noopener">open it in a new tab</a>
-          or grab the
-          <a
-            href="https://github.com/TesilMedia/Tesil-Video-Player/releases/latest"
-            target="_blank"
-            rel="noopener"
-            >Windows build</a
-          >.
-        </p>
-      </header>
       <div class="embed">
         <iframe
           title="Tesil Video Player"
