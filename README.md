@@ -2,31 +2,30 @@
 
 **Try in browser:** [https://tesilmedia.github.io/Tesil-Video-Player/](https://tesilmedia.github.io/Tesil-Video-Player/)
 
-Tesil Video Player is a lightweight custom video player that runs in the browser and also ships as a Windows desktop app (Electron).
+Tesil Video Player is a lightweight custom video player that runs in the browser and also ships as a Windows desktop app.
 
 ## Features
 
-- Open local video files from the file picker.
-
-- Drag and drop files or URLs directly into the player.
-
-- Load remote sources by URL:
-  - Direct video links (`http/https`, e.g. MP4/WebM).
+- Comprehensive Video Source Loading:
+  - Direct video links (`http/https`)
   - YouTube links (`youtu.be`, `watch`, `shorts`, `live`, and embed forms).
   - Vimeo links (site and player links).
-  - Twitch links (videos, live channels, and clips).
+  - Twitch links (videos, live channels, and clips)
+  - Supports `mp4`, `webm`, `mkv`, `mov`, `m4v`, `ogv`, `ogg`, `avi`, `3gp`, `3g2`
+  - Drag and drop files or URLs directly into the player.
+  - Open local video files from the file picker.
 
-- Native custom controls (no default browser controls):
-  - Play/pause, seek bar, and precise current/total time display (`ms`).
+- Native custom controls:
+  - Millisecond time display.
   - Scrub preview thumbnail + timestamp while hovering/scrubbing.
+  - Frame-by-frame stepping, including hold-to-repeat.
+  - Playback speed controls from `0.25x` to `3x`.
   - Mute/unmute and volume slider.
-- Playback speed controls from `0.25x` to `3x`.
-  - Frame-by-frame stepping (previous/next frame), including hold-to-repeat.
   - Fullscreen toggle and Picture-in-Picture support (when available).
-- Zoom in/out/reset up to `900%` (`9x`) with pan while zoomed.
+  - Zoom in up to `900%` (`9x`), and pan while zoomed.
 
 - Desktop and touch-friendly interaction model:
-  - Scroll wheel zoom toward pointer.
+  - Scroll wheel zooms toward pointer.
   - Pinch-to-zoom on touch devices.
   - Drag to pan when zoomed.
   - Tap video area to play/pause on touch.
@@ -34,12 +33,12 @@ Tesil Video Player is a lightweight custom video player that runs in the browser
 - Keyboard shortcuts:
   - `Space`: play/pause
   - `Left/Right`: seek `-5s/+5s`
-  - `,` and `.`: frame step backward/forward (hold to repeat)
+  - `,` and `.`: frame step backward/forward
   - `Up/Down`: volume up/down
   - `M`: mute
   - `F`: fullscreen
-  - `[` and `]`: slower/faster playback (hold to repeat)
-  - `+` and `-`: zoom in/out (hold to repeat)
+  - `[` and `]`: slower/faster playback
+  - `+` and `-`: zoom in/out
   - `0`: reset zoom
 
 - Robust cross-browser handling for media behaviors such as iOS/WebKit volume routing and fullscreen edge cases.
