@@ -80,6 +80,15 @@
   const usesCoarsePrimaryPointer =
     typeof window.matchMedia === "function" &&
     window.matchMedia("(pointer: coarse)").matches;
+  const isMobileLikePlaybackEnvironment =
+    usesCoarsePrimaryPointer ||
+    (typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: none)").matches);
+  /**
+   * Mobile Safari can glitch at non-1x once audio is routed through Web Audio (`MediaElementSource`).
+   * Keep the native output path there and rely on hardware volume controls.
+   */
+  const allowWebAudioVolumeRoute = !isMobileLikePlaybackEnvironment;
 
   /** iOS and many mobile browsers ignore `video.volume` writes; mute still works. */
   function browserAllowsMediaElementVolumeControl() {
@@ -134,6 +143,7 @@
 
   function ensureWebAudioGainRoute() {
     if (elementVolumeControlsOutput) return false;
+    if (!allowWebAudioVolumeRoute) return false;
     if (webAudioVolumeRoute && webAudioCtx && webAudioGain) {
       void webAudioCtx.resume();
       return true;
@@ -236,7 +246,9 @@
     if (!(volumeSlider instanceof HTMLInputElement)) return;
     const enabled =
       elementVolumeControlsOutput ||
-      (webAudioVolumeConstructorAvailable() && !webAudioVolumeSetupFailed);
+      (allowWebAudioVolumeRoute &&
+        webAudioVolumeConstructorAvailable() &&
+        !webAudioVolumeSetupFailed);
     volumeSlider.disabled = !enabled;
     volumeSlider.setAttribute(
       "aria-label",
@@ -1597,14 +1609,64 @@
   }
 
   const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+  const MOBILE_SAFE_PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  const ACTIVE_PLAYBACK_RATES = isMobileLikePlaybackEnvironment
+    ? MOBILE_SAFE_PLAYBACK_RATES
+    : PLAYBACK_RATES;
+
+  /**
+   * Mobile browsers can produce audible skip/repeat artifacts with pitch correction enabled while
+   * changing playback speed. Prefer natural pitch-shift there for smoother time stretching.
+   */
+  function applyPlaybackPitchPolicy() {
+    if (!(video instanceof HTMLMediaElement)) return;
+    const preserve = true;
+    if ("preservesPitch" in video) {
+      video.preservesPitch = preserve;
+    }
+    if ("webkitPreservesPitch" in video) {
+      video.webkitPreservesPitch = preserve;
+    }
+    if ("mozPreservesPitch" in video) {
+      video.mozPreservesPitch = preserve;
+    }
+  }
+
+  function nearestPlaybackRate(v) {
+    let best = ACTIVE_PLAYBACK_RATES[0];
+    for (let i = 1; i < ACTIVE_PLAYBACK_RATES.length; i += 1) {
+      if (Math.abs(ACTIVE_PLAYBACK_RATES[i] - v) < Math.abs(best - v)) {
+        best = ACTIVE_PLAYBACK_RATES[i];
+      }
+    }
+    return best;
+  }
+
+  function applyPlaybackRate(nextRate) {
+    const safeRate = nearestPlaybackRate(nextRate);
+    applyPlaybackPitchPolicy();
+    video.defaultPlaybackRate = safeRate;
+    video.playbackRate = safeRate;
+    return safeRate;
+  }
+
+  function syncPlaybackRateOptionsUI() {
+    if (!(playbackRateSelect instanceof HTMLSelectElement)) return;
+    for (const opt of playbackRateSelect.options) {
+      const v = Number(opt.value);
+      const enabled = ACTIVE_PLAYBACK_RATES.includes(v);
+      opt.disabled = !enabled;
+      opt.hidden = !enabled;
+    }
+  }
 
   function playbackRateIndex() {
     const cur = video.playbackRate;
     let bestI = 0;
-    for (let i = 1; i < PLAYBACK_RATES.length; i += 1) {
+    for (let i = 1; i < ACTIVE_PLAYBACK_RATES.length; i += 1) {
       if (
-        Math.abs(PLAYBACK_RATES[i] - cur) <
-        Math.abs(PLAYBACK_RATES[bestI] - cur)
+        Math.abs(ACTIVE_PLAYBACK_RATES[i] - cur) <
+        Math.abs(ACTIVE_PLAYBACK_RATES[bestI] - cur)
       ) {
         bestI = i;
       }
@@ -1614,11 +1676,11 @@
 
   function syncPlaybackRateSelect() {
     const r = video.playbackRate;
-    const exact = PLAYBACK_RATES.find((x) => Math.abs(x - r) < 0.0001);
+    const exact = ACTIVE_PLAYBACK_RATES.find((x) => Math.abs(x - r) < 0.0001);
     if (exact !== undefined) {
       playbackRateSelect.value = String(exact);
     } else {
-      playbackRateSelect.value = String(PLAYBACK_RATES[playbackRateIndex()]);
+      playbackRateSelect.value = String(ACTIVE_PLAYBACK_RATES[playbackRateIndex()]);
     }
     requestAnimationFrame(() => syncRatePillWidthToZoom());
   }
@@ -1627,18 +1689,18 @@
     const i = Math.max(
       0,
       Math.min(
-        PLAYBACK_RATES.length - 1,
+        ACTIVE_PLAYBACK_RATES.length - 1,
         playbackRateIndex() + deltaSteps
       )
     );
-    video.playbackRate = PLAYBACK_RATES[i];
-    playbackRateSelect.value = String(PLAYBACK_RATES[i]);
+    const next = applyPlaybackRate(ACTIVE_PLAYBACK_RATES[i]);
+    playbackRateSelect.value = String(next);
     requestAnimationFrame(() => syncRatePillWidthToZoom());
   }
 
   playbackRateSelect.addEventListener("change", () => {
     const v = Number(playbackRateSelect.value);
-    if (Number.isFinite(v)) video.playbackRate = v;
+    if (Number.isFinite(v)) applyPlaybackRate(v);
   });
 
   wireHeldChromeButton(rateDownBtn, () => nudgePlaybackRate(-1));
@@ -1700,6 +1762,7 @@
   );
 
   video.addEventListener("ratechange", () => {
+    applyPlaybackPitchPolicy();
     syncPlaybackRateSelect();
   });
 
@@ -1711,6 +1774,7 @@
   video.addEventListener("loadedmetadata", () => {
     framePeriodSamples.length = 0;
     lastMediaTime = null;
+    applyPlaybackPitchPolicy();
     syncPreviewVideoSrc();
     syncPlaybackRateSelect();
     updateTimeDisplay();
@@ -2725,6 +2789,9 @@
 
   volumeSlider.value = String(video.volume);
   syncVolumeSliderLockedUI();
+  syncPlaybackRateOptionsUI();
+  applyPlaybackRate(video.playbackRate || 1);
+  applyPlaybackPitchPolicy();
   setMutedUI();
   setState(!video.paused);
   syncPreviewVideoSrc();
