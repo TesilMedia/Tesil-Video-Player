@@ -58,6 +58,30 @@ Tesil Video Player is a lightweight custom video player that runs in the browser
 1. Open: [https://tesilmedia.github.io/Tesil-Video-Player/](https://tesilmedia.github.io/Tesil-Video-Player/)
 2. Open a local file or paste a supported URL.
 
+## Embed in your website
+
+Use the dedicated embed page (player-only view; no title, file/link rows, or shortcuts panel):
+
+`https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html`
+
+You can also pre-load a source with `src`:
+
+`https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html?src=https%3A%2F%2Fstorage.googleapis.com%2Fgtv-videos-bucket%2Fsample%2FBigBuckBunny.mp4`
+
+Example iframe:
+
+```html
+<iframe
+  src="https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html"
+  title="Tesil Video Player"
+  allow="fullscreen; picture-in-picture"
+  allowfullscreen
+  loading="lazy"
+  referrerpolicy="strict-origin-when-cross-origin"
+  style="width:100%;aspect-ratio:16/9;border:0;"
+></iframe>
+```
+
 ### Windows (Desktop)
 
 Download the latest release from [GitHub Releases](https://github.com/TesilMedia/Tesil-Video-Player/releases/latest).

@@ -35,6 +35,27 @@
   const ytMount = document.getElementById("ytMount");
   const urlInput = document.getElementById("urlInput");
   const loadUrlBtn = document.getElementById("loadUrlBtn");
+  const pageShell = document.querySelector(".page");
+
+  const startupQuery = (() => {
+    try {
+      return new URLSearchParams(window.location.search || "");
+    } catch (_) {
+      return new URLSearchParams();
+    }
+  })();
+  const embedModeRequested = ["1", "true", "yes"].includes(
+    String(startupQuery.get("embed") || "").toLowerCase()
+  );
+  const startupSourceFromQuery = String(startupQuery.get("src") || "").trim();
+
+  function applyEmbedMode() {
+    if (!embedModeRequested) return;
+    if (pageShell instanceof HTMLElement) pageShell.classList.add("page--embed");
+    if (document.body instanceof HTMLElement) {
+      document.body.classList.add("page--embed-host");
+    }
+  }
 
   const PREVIEW_W = 160;
   const PREVIEW_H = 90;
@@ -1238,6 +1259,13 @@
   }
 
   window.addEventListener("load", () => {
+    applyEmbedMode();
+    if (startupSourceFromQuery) {
+      if (urlInput instanceof HTMLInputElement) {
+        urlInput.value = startupSourceFromQuery;
+      }
+      tryLoadFromUrlString(startupSourceFromQuery);
+    }
     applyDemoSampleIfNeeded();
     window.setTimeout(applyDemoSampleIfNeeded, 350);
   });

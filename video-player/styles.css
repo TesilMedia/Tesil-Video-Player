@@ -60,6 +60,33 @@ body::-webkit-scrollbar {
   padding: 1.5rem;
 }
 
+body.page--embed-host {
+  margin: 0;
+  overflow: hidden;
+}
+
+.page.page--embed {
+  max-width: none;
+  width: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+}
+
+.page.page--embed .title,
+.page.page--embed .upload-row,
+.page.page--embed .url-row,
+.page.page--embed .commands {
+  display: none !important;
+}
+
+.page.page--embed .player {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  aspect-ratio: auto;
+}
+
 .title {
   font-size: 1.25rem;
   font-weight: 600;
