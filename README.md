@@ -1,1 +1,64 @@
+# Tesil Video Player
 
+**Try in browser:** [https://tesilmedia.github.io/Tesil-Video-Player/](https://tesilmedia.github.io/Tesil-Video-Player/)
+
+Tesil Video Player is a lightweight custom video player that runs in the browser and also ships as a Windows desktop app (Electron).
+
+## Features
+
+- Open local video files from the file picker.
+
+- Drag and drop files or URLs directly into the player.
+
+- Load remote sources by URL:
+  - Direct video links (`http/https`, e.g. MP4/WebM).
+  - YouTube links (`youtu.be`, `watch`, `shorts`, `live`, and embed forms).
+  - Vimeo links (site and player links).
+  - Twitch links (videos, live channels, and clips).
+
+- Native custom controls (no default browser controls):
+  - Play/pause, seek bar, and precise current/total time display (`ms`).
+  - Scrub preview thumbnail + timestamp while hovering/scrubbing.
+  - Mute/unmute and volume slider.
+- Playback speed controls from `0.25x` to `3x`.
+  - Frame-by-frame stepping (previous/next frame), including hold-to-repeat.
+  - Fullscreen toggle and Picture-in-Picture support (when available).
+- Zoom in/out/reset up to `900%` (`9x`) with pan while zoomed.
+
+- Desktop and touch-friendly interaction model:
+  - Scroll wheel zoom toward pointer.
+  - Pinch-to-zoom on touch devices.
+  - Drag to pan when zoomed.
+  - Tap video area to play/pause on touch.
+
+- Keyboard shortcuts:
+  - `Space`: play/pause
+  - `Left/Right`: seek `-5s/+5s`
+  - `,` and `.`: frame step backward/forward (hold to repeat)
+  - `Up/Down`: volume up/down
+  - `M`: mute
+  - `F`: fullscreen
+  - `[` and `]`: slower/faster playback (hold to repeat)
+  - `+` and `-`: zoom in/out (hold to repeat)
+  - `0`: reset zoom
+
+- Robust cross-browser handling for media behaviors such as iOS/WebKit volume routing and fullscreen edge cases.
+
+## Windows App
+
+- Built with Electron.
+- Supports opening videos passed from the OS ("Open with" / file double-click).
+- Uses a local `http://127.0.0.1` static server in desktop mode to keep embed playback compatible.
+- Single-instance behavior: opening another file routes it into the existing app window.
+- GitHub Actions workflow builds portable Windows release zips on version tags.
+
+## Quick Start
+
+### Browser
+
+1. Open: [https://tesilmedia.github.io/Tesil-Video-Player/](https://tesilmedia.github.io/Tesil-Video-Player/)
+2. Open a local file or paste a supported URL.
+
+### Windows (Desktop)
+
+Download the latest release from [GitHub Releases](https://github.com/TesilMedia/Tesil-Video-Player/releases/latest).

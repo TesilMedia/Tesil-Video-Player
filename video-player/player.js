@@ -75,7 +75,7 @@
   const activeTouchPointersOnPlayer = new Set();
 
   const MIN_ZOOM = 1;
-  const MAX_ZOOM = 4;
+  const MAX_ZOOM = 9;
   const ZOOM_STEP = 0.25;
   const usesCoarsePrimaryPointer =
     typeof window.matchMedia === "function" &&
@@ -1596,7 +1596,7 @@
     muteBtn.dataset.tooltip = video.muted ? "Unmute (M)" : "Mute (M)";
   }
 
-  const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 
   function playbackRateIndex() {
     const cur = video.playbackRate;
