@@ -66,13 +66,13 @@ Use the dedicated embed page (player-only view; no title, file/link rows, or sho
 
 You can also pre-load a source with `src`:
 
-`https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html?src=https%3A%2F%2Fstorage.googleapis.com%2Fgtv-videos-bucket%2Fsample%2FBigBuckBunny.mp4`
+`https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html?src=`
 
 Example iframe:
 
 ```html
 <iframe
-  src="https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html"
+  src="https://tesilmedia.github.io/Tesil-Video-Player/video-player/embed.html?src=https://static.vecteezy.com/system/resources/previews/006/996/470/mp4/waves-on-the-beach-of-nai-harn-thailand-free-video.mp4"
   title="Tesil Video Player"
   allow="fullscreen; picture-in-picture"
   allowfullscreen
