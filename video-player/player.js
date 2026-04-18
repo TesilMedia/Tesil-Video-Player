@@ -1682,10 +1682,8 @@
   }
 
   const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
-  const MOBILE_SAFE_PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-  const ACTIVE_PLAYBACK_RATES = isMobileLikePlaybackEnvironment
-    ? MOBILE_SAFE_PLAYBACK_RATES
-    : PLAYBACK_RATES;
+  /** Same rates on touch / no-hover as desktop (0.25×–3×); revisit if pitch/skip artifacts return on mobile WebKit. */
+  const ACTIVE_PLAYBACK_RATES = PLAYBACK_RATES;
 
   /**
    * Mobile browsers can produce audible skip/repeat artifacts with pitch correction enabled while
@@ -1726,10 +1724,9 @@
   function syncPlaybackRateOptionsUI() {
     if (!(playbackRateSelect instanceof HTMLSelectElement)) return;
     for (const opt of playbackRateSelect.options) {
-      const v = Number(opt.value);
-      const enabled = ACTIVE_PLAYBACK_RATES.includes(v);
-      opt.disabled = !enabled;
-      opt.hidden = !enabled;
+      /* Keep every speed visible; actual rate is still clamped via `nearestPlaybackRate` / `applyPlaybackRate`. */
+      opt.disabled = false;
+      opt.hidden = false;
     }
   }
 
