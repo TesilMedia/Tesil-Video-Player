@@ -18,7 +18,7 @@
   --chrome-control-border: rgba(255, 255, 255, 0.14);
   --chrome-track: #454a56;
   /* Default chrome sizing; `.player` overrides with container-relative values */
-  --chrome-control-height: 2.5rem;
+  --chrome-control-height: 2rem;
   /* Match progress-to-bar spacing with `.player__bar` inter-control gap */
   --chrome-gap: 0.45rem;
   /* Unified size for labels, time, speed dropdown, and bar buttons */
@@ -240,7 +240,7 @@ body.page--embed-host {
   container-name: player;
   -webkit-touch-callout: none;
   /* All chrome scales with player width (cqw); one row, no breakpoint wrap */
-  --chrome-control-height: clamp(0.98rem, 0.06rem + 8.8cqw, 2.5rem);
+  --chrome-control-height: clamp(0.784rem, 0.048rem + 7.04cqw, 2rem);
   --chrome-font-size: clamp(0.4rem, 0.05rem + 3.35cqw, 0.875rem);
   --chrome-gap: clamp(0.04rem, 0.006rem + 1.55cqw, 0.45rem);
   /* Volume rail width (scales with player width via cqw) */
@@ -1057,7 +1057,7 @@ body.page--embed-host {
   }
 
   .player {
-    --chrome-control-height: clamp(0.85rem, 0.05rem + 6.8cqw, 2.1rem);
+    --chrome-control-height: clamp(0.68rem, 0.04rem + 5.44cqw, 1.68rem);
     --chrome-font-size: clamp(0.38rem, 0.042rem + 2.85cqw, 0.78rem);
     --chrome-gap: clamp(0.04rem, 0.005rem + 1.2cqw, 0.38rem);
     --vol-rail-expanded: min(12rem, max(3rem, 26cqw));
