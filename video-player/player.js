@@ -140,6 +140,26 @@
     return false;
   }
 
+  function isNativeFullscreenActive() {
+    return Boolean(
+      document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        video.webkitDisplayingFullscreen === true ||
+        (typeof video.webkitPresentationMode === "string" &&
+          video.webkitPresentationMode === "fullscreen")
+    );
+  }
+
+  function syncFullscreenButtonUI() {
+    if (!(fullscreenBtn instanceof HTMLElement)) return;
+    const active = isNativeFullscreenActive();
+    fullscreenBtn.setAttribute("aria-label", active ? "Exit fullscreen" : "Fullscreen");
+    fullscreenBtn.setAttribute(
+      "data-tooltip",
+      active ? "Exit fullscreen (F)" : "Fullscreen (F)"
+    );
+  }
+
   /** When true, drive loudness with `video.volume`; otherwise try Web Audio gain (see below). */
   const elementVolumeControlsOutput =
     browserAllowsMediaElementVolumeControl() && !isIosStyleVolumeLockedPlatform();
@@ -882,6 +902,7 @@
       ytMount.hidden = true;
     }
     video.hidden = false;
+    syncFullscreenButtonUI();
   }
 
   function parseYouTubeVideoId(raw) {
@@ -1040,6 +1061,7 @@
       fileNameEl.textContent = displayLabel || iframeTitle;
     }
     clearAllFrameHold();
+    syncFullscreenButtonUI();
   }
 
   function loadYouTubeFromId(videoId, displayLabel) {
@@ -2429,32 +2451,73 @@
     setMutedUI();
   });
 
+  function videoSupportsWebKitPresentationMode(mode) {
+    try {
+      return (
+        typeof video.webkitSupportsPresentationMode === "function" &&
+        Boolean(video.webkitSupportsPresentationMode(mode))
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function pipApiSupported() {
+    if (video.disablePictureInPicture === true) return false;
+    if (
+      videoSupportsWebKitPresentationMode("picture-in-picture") &&
+      typeof video.webkitSetPresentationMode === "function"
+    ) {
+      return true;
+    }
+    return typeof video.requestPictureInPicture === "function";
+  }
+
   function syncPipVisibility() {
     if (!(pipBtn instanceof HTMLElement)) return;
     if (video.disablePictureInPicture === true) {
       pipBtn.hidden = true;
       return;
     }
-    pipBtn.hidden = typeof video.requestPictureInPicture !== "function";
+    pipBtn.hidden = !pipApiSupported();
   }
 
   syncPipVisibility();
 
-  pipBtn.addEventListener("click", async () => {
+  pipBtn.addEventListener("click", () => {
     if (video.disablePictureInPicture === true) return;
-    if (typeof video.requestPictureInPicture !== "function") return;
-    try {
-      if (document.pictureInPictureElement === video) {
-        await document.exitPictureInPicture();
-      } else {
-        await video.requestPictureInPicture();
+
+    if (
+      videoSupportsWebKitPresentationMode("picture-in-picture") &&
+      typeof video.webkitSetPresentationMode === "function"
+    ) {
+      try {
+        const next =
+          video.webkitPresentationMode === "picture-in-picture"
+            ? "inline"
+            : "picture-in-picture";
+        video.webkitSetPresentationMode(next);
+        return;
+      } catch (_) {
+        /* fall through to Picture-in-Picture API */
       }
-    } catch {
-      /* user gesture / policy */
     }
+
+    if (typeof video.requestPictureInPicture !== "function") return;
+    void (async () => {
+      try {
+        if (document.pictureInPictureElement === video) {
+          await document.exitPictureInPicture();
+        } else {
+          await video.requestPictureInPicture();
+        }
+      } catch (_) {
+        /* user gesture / policy */
+      }
+    })();
   });
 
-  fullscreenBtn.addEventListener("click", async () => {
+  fullscreenBtn.addEventListener("click", () => {
     /*
      * Match v1.1.10: toggle on #player via the standard Fullscreen API first (works in the site
      * iframe on Windows). Exit both standard and WebKit document fullscreen when needed — using
@@ -2472,58 +2535,127 @@
       } catch (_) {
         /* not allowed */
       }
+      syncFullscreenButtonUI();
+      return;
+    }
+
+    if (
+      !isExternalEmbedSource() &&
+      typeof video.webkitSetPresentationMode === "function" &&
+      video.webkitPresentationMode === "fullscreen"
+    ) {
+      try {
+        video.webkitSetPresentationMode("inline");
+      } catch (_) {
+        /* not allowed */
+      }
+      syncFullscreenButtonUI();
       return;
     }
 
     if (document.fullscreenElement || document.webkitFullscreenElement) {
+      void (async () => {
+        try {
+          if (document.exitFullscreen) await document.exitFullscreen();
+        } catch (_) {
+          /* not allowed */
+        }
+        try {
+          if (document.webkitExitFullscreen && document.webkitFullscreenElement) {
+            await document.webkitExitFullscreen();
+          }
+        } catch (_) {
+          /* not allowed */
+        }
+        syncFullscreenButtonUI();
+      })();
+      return;
+    }
+
+    /*
+     * Mobile WebKit: `requestFullscreen` on our player shell is missing or ineffective. Native
+     * fullscreen must run synchronously in the tap handler — `webkitSetPresentationMode` and
+     * `webkitEnterFullscreen` both require an active user gesture and are unreliable after `await`.
+     */
+    if (!isExternalEmbedSource()) {
+      const preferNativeMobileFullscreen =
+        isIosStyleVolumeLockedPlatform() || isMobileLikePlaybackEnvironment;
+
+      if (
+        preferNativeMobileFullscreen &&
+        videoSupportsWebKitPresentationMode("fullscreen") &&
+        typeof video.webkitSetPresentationMode === "function" &&
+        video.webkitPresentationMode !== "fullscreen"
+      ) {
+        try {
+          video.webkitSetPresentationMode("fullscreen");
+          syncFullscreenButtonUI();
+          return;
+        } catch (_) {
+          /* fall through */
+        }
+      }
+
       try {
-        if (document.exitFullscreen) await document.exitFullscreen();
+        if (
+          typeof video.webkitEnterFullscreen === "function" &&
+          preferNativeMobileFullscreen
+        ) {
+          video.webkitEnterFullscreen();
+          syncFullscreenButtonUI();
+          return;
+        }
+      } catch (_) {
+        /* fall through */
+      }
+    }
+
+    void (async () => {
+      try {
+        await player.requestFullscreen();
+        syncFullscreenButtonUI();
+        return;
       } catch (_) {
         /* not allowed */
       }
       try {
-        if (document.webkitExitFullscreen && document.webkitFullscreenElement) {
-          await document.webkitExitFullscreen();
+        if (typeof player.webkitRequestFullscreen === "function") {
+          await player.webkitRequestFullscreen();
+          syncFullscreenButtonUI();
+          return;
         }
       } catch (_) {
         /* not allowed */
       }
-      return;
-    }
 
-    try {
-      await player.requestFullscreen();
-      return;
-    } catch (_) {
-      /* not allowed */
-    }
-    try {
-      if (typeof player.webkitRequestFullscreen === "function") {
-        await player.webkitRequestFullscreen();
-        return;
-      }
-    } catch (_) {
-      /* not allowed */
-    }
+      if (isExternalEmbedSource()) return;
 
-    if (isExternalEmbedSource()) return;
-
-    try {
-      if (typeof video.requestFullscreen === "function") {
-        await video.requestFullscreen();
-        return;
-      }
-    } catch (_) {
-      /* not allowed */
-    }
-    if (typeof video.webkitEnterFullscreen === "function") {
       try {
-        video.webkitEnterFullscreen();
+        if (typeof video.requestFullscreen === "function") {
+          await video.requestFullscreen();
+          syncFullscreenButtonUI();
+          return;
+        }
       } catch (_) {
         /* not allowed */
       }
-    }
+      if (typeof video.webkitEnterFullscreen === "function") {
+        try {
+          video.webkitEnterFullscreen();
+          syncFullscreenButtonUI();
+        } catch (_) {
+          /* not allowed */
+        }
+      }
+    })();
   });
+
+  document.addEventListener("fullscreenchange", syncFullscreenButtonUI);
+  document.addEventListener("webkitfullscreenchange", syncFullscreenButtonUI);
+  video.addEventListener("webkitbeginfullscreen", syncFullscreenButtonUI);
+  video.addEventListener("webkitendfullscreen", syncFullscreenButtonUI);
+  video.addEventListener("webkitpresentationmodechanged", syncFullscreenButtonUI);
+  syncFullscreenButtonUI();
 
   function isEditableFocusOutsidePlayer() {
     const ae = document.activeElement;
